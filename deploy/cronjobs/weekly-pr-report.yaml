@@ -1,0 +1,61 @@
+# CronJob for weekly PR health report
+# Creates a Task in server-foundation namespace to generate the report
+# Schedule: Monday 09:00 CST (UTC+8) = Monday 01:00 UTC
+# Test:
+#   kubectl create job test-weekly-pr-report --from=cronjob/weekly-pr-report-cron -n server-foundation
+#   kubectl get jobs -n server-foundation -l job-name=test-weekly-pr-report
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-pr-report-cron
+  namespace: server-foundation
+  labels:
+    app.kubernetes.io/name: weekly-pr-report
+    app.kubernetes.io/part-of: server-foundation-agent
+    app.kubernetes.io/component: scheduler
+spec:
+  # Monday 09:00 CST (UTC+8) = Monday 01:00 UTC
+  schedule: "0 1 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          serviceAccountName: server-foundation-cron-task-creator
+          restartPolicy: OnFailure
+          containers:
+            - name: task-creator
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "Creating weekly PR report task..."
+
+                  cat <<EOF | kubectl create -f -
+                  apiVersion: kubeopencode.io/v1alpha1
+                  kind: Task
+                  metadata:
+                    generateName: weekly-pr-report-task-
+                    namespace: server-foundation
+                    labels:
+                      app.kubernetes.io/name: weekly-pr-report
+                      app.kubernetes.io/part-of: server-foundation-agent
+                      batch.kubeopencode.io/job-type: weekly-pr-report
+                    annotations:
+                      kubeopencode.io/triggered-by: cronjob/weekly-pr-report-cron
+                  spec:
+                    agentRef:
+                      name: server-foundation-agent
+                    description: |
+                      Use the fetch-prs skill to gather server foundation PRs then follow @workflows/weekly-pr-report.md
+                      to generate the weekly PR health report for the Server Foundation team. After generating the report,
+                      send it to Slack using the slack-notify skill.
+                  EOF
+
+                  echo "Weekly PR report task created"

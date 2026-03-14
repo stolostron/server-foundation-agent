@@ -1,0 +1,110 @@
+# ServiceAccount for the server-foundation-agent Agent
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: server-foundation-agent
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+---
+# Role granting the agent permissions to manage tasks and read agents
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: server-foundation-agent-task-role
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+rules:
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks", "tasktemplates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks/status", "tasktemplates/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["agents"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: server-foundation-agent-task-binding
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+subjects:
+  - kind: ServiceAccount
+    name: server-foundation-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: server-foundation-agent-task-role
+---
+# ServiceAccount for external task creation (e.g., CI pipelines)
+# Get a token: kubectl create token server-foundation-task-creator -n server-foundation
+# Get a token with 1 year expiration: kubectl create token server-foundation-task-creator -n server-foundation --duration=8760h
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: server-foundation-task-creator
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: server-foundation-task-creator-role
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+rules:
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: server-foundation-task-creator-binding
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+subjects:
+  - kind: ServiceAccount
+    name: server-foundation-task-creator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: server-foundation-task-creator-role
+---
+# ServiceAccount for CronJob task creation (same namespace, no cross-namespace binding needed)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: server-foundation-cron-task-creator
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+    app.kubernetes.io/component: scheduler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: server-foundation-cron-task-creator-role
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+    app.kubernetes.io/component: scheduler
+rules:
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: server-foundation-cron-task-creator-binding
+  labels:
+    app.kubernetes.io/part-of: server-foundation-agent
+    app.kubernetes.io/component: scheduler
+subjects:
+  - kind: ServiceAccount
+    name: server-foundation-cron-task-creator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: server-foundation-cron-task-creator-role

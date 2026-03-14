@@ -1,0 +1,4 @@
+# Secrets — never commit actual credentials
+**/secrets.yaml
+**/secrets.*.yaml
+!**/secrets.example.yaml
