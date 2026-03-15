@@ -6,4 +6,4 @@ resources:
   - rbac.yaml
   - agent.yaml
   - secrets.yaml
-  - cronjobs/weekly-pr-report.yaml
+  - cronjobs/every-monday-morning.yaml

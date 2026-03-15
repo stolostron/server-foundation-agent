@@ -116,6 +116,17 @@ yq eval-all '.stringData // {} | to_entries[] | .key + "=" + "\"" + (.value | su
 
 See [deploy/README.md](deploy/README.md) for setup instructions.
 
+## Agent Context Convention
+
+Every directory that contains a `README.md` intended as agent context **MUST** also have symlinks so all AI coding tools can discover it:
+
+```bash
+ln -s README.md CLAUDE.md   # Claude Code / Claude Agent
+ln -s README.md AGENTS.md   # Codex / other agents
+```
+
+When creating a new `README.md` in any subdirectory, always create both symlinks alongside it.
+
 ## Adding a New Skill
 
 1. Create `.claude/skills/<skill-name>/SKILL.md` with frontmatter (`name`, `description`) and a step-by-step checklist

@@ -35,6 +35,10 @@ cp deploy/secrets.example.yaml deploy/secrets.yaml
 kubectl apply -k deploy/
 ```
 
+## Changing Resources
+
+When renaming, adding, or removing any resource file under `deploy/`, always review `kustomization.yaml` to ensure all `resources:` entries match the actual filenames. Stale references will cause `kubectl apply -k` to fail.
+
 ## Manual Task Triggers
 
 ### Weekly PR Report
