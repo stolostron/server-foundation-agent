@@ -1,7 +1,7 @@
 # Weekly Bot PR Report Workflow
 
-Analyze all open bot-submitted PRs on the Server Foundation project board, check their CI status,
-and generate an actionable report that tells the team which PRs are safe to merge and which need investigation.
+Analyze all open bot-submitted PRs on the Server Foundation project board, diagnose CI failures using
+failure pattern matching, attempt auto-fixes via sub-agents, and generate an actionable report.
 
 ## Trigger Phrases
 
@@ -11,8 +11,27 @@ and generate an actionable report that tells the team which PRs are safe to merg
 ## Workflow Phases
 
 ```
-Phase 1: Collect    →  Phase 2: CI Check    →  Phase 3: Diagnose    →  Phase 4: Report    →  Phase 5: Distribute (optional)
-fetch-prs skill        gh pr checks            apply triage rules       generate Markdown       slack-notify
+Phase 1: Collect    →  Phase 2: Classify     →  Phase 3: Diagnose      →  Phase 4: Report    →  Phase 5: Distribute
+fetch-prs skill        jq + collect_checks      sub-agents per PR          generate Markdown       slack-notify
+```
+
+---
+
+## Bundled Scripts
+
+This workflow includes ready-to-use scripts. **Do NOT write your own processing scripts** — use the bundled ones:
+
+```
+workflows/weekly-bot-pr-report/
+├── process_bot_prs.jq              # Phase 2: filter raw PRs to open bot PRs
+├── collect_checks.py               # Phase 2: collect CI check results per PR
+├── diagnose_pr.md                  # Phase 3: sub-agent instructions template
+├── failure-patterns/
+│   ├── 01-go-version-mismatch.md   # FP-01: Go version upgrade detection & fix
+│   ├── 02-e2e-cluster-pool.md      # FP-02: E2E cluster pool claim failure
+│   └── 03-build-failure.md         # FP-03: Build compilation failure
+├── generate_report.py              # Phase 4: generate Markdown report
+└── generate_slack_payload.py       # Phase 5: generate Slack payload
 ```
 
 ---
@@ -21,236 +40,204 @@ fetch-prs skill        gh pr checks            apply triage rules       generate
 
 Use the `fetch-prs` skill with `all` detail level to get full PR lifecycle data.
 
-### 1.1 Filter to Open Bot PRs
-
-From the JSON output, keep only PRs where:
-
-- `content.state == "OPEN"`
-- Author **IS** a bot
-
-**Bot filter** — include PRs where `content.author.login` matches any of:
-
-| Pattern | Match type |
-|---------|------------|
-| `red-hat-konflux` | exact |
-| `dependabot` | exact |
-| `renovate` | exact |
-| any login ending with `[bot]` | suffix |
-| any login ending with `-bot` | suffix |
+This returns a JSON array. Save it to a temp file for Phase 2.
 
 **Dependency**: `.claude/skills/fetch-prs/SKILL.md`
 
 ---
 
-## Phase 2: Retrieve CI Check Status
+## Phase 2: Classify
 
-For each open bot PR, retrieve CI check results:
+Run the bundled scripts to filter bot PRs and collect their CI check status.
+
+### 2.1 Filter to Open Bot PRs
 
 ```bash
-gh pr checks <PR_NUMBER> -R <REPO_OWNER/REPO_NAME>
+mkdir -p .output
+jq --argjson today_sec $(date +%s) -f workflows/weekly-bot-pr-report/process_bot_prs.jq <raw_prs.json> > .output/bot_prs.json
 ```
 
-Parse the output into structured data. Each check has:
+The jq script keeps only open PRs authored by bots (red-hat-konflux, dependabot, renovate, `*[bot]`, `*-bot`) and produces flat fields: `.author`, `.repo`, `.short_repo`, `.title`, `.url`, `.number`, `.age_days`, `.branch`, `.is_fork`.
 
-- **name**: Check name (e.g., `ci/prow/images`, `Red Hat Konflux / ...`)
-- **status**: `pass`, `fail`, or `pending`
-- **duration**: Run time
-- **url**: Link to check details
+### 2.2 Collect CI Check Results
 
-### 2.1 Classify Check Results Per PR
+```bash
+python3 workflows/weekly-bot-pr-report/collect_checks.py .output/bot_prs.json .output/bot_prs_with_checks.json
+```
 
-For each PR, compute:
+For each PR, runs `gh pr checks --json name,bucket,link` and augments the PR object with:
 
-- **all_passed**: Every check has status `pass` (ignore `tide` which is always `pending` until merge labels are added)
-- **has_failures**: At least one check has status `fail`
-- **all_pending**: All checks are still `pending`
+- `.check_status`: `"all_passed"` | `"has_failures"` | `"all_pending"` | `"mixed"` | `"no_checks"`
+- `.failed_checks`: `["ci/prow/images", "ci/prow/e2e", ...]`
+- `.all_checks`: `[{name, bucket, link}, ...]`
+
+**Excluded from classification**: `tide` (always pending until merge labels), `SonarCloud Code Analysis` (code quality, not build).
+
+### 2.3 Pre-Diagnosis Filtering
+
+Before spawning sub-agents, separate PRs by check status:
+
+| check_status | Category | Sub-agent needed? |
+|--------------|----------|-------------------|
+| `all_passed` | Recommend Merge | No — write result directly |
+| `has_failures` | Needs diagnosis | **Yes** |
+| `all_pending` | Pending | No — write result directly |
+| `mixed` | Pending | No — write result directly |
+| `no_checks` | Pending | No — write result directly |
+
+For PRs that do NOT need a sub-agent, write their diagnosis result JSON directly to `.output/diagnoses/pr-<NUMBER>.json`.
 
 ---
 
-## Phase 3: Diagnose Failures
+## Phase 3: Diagnose (Sub-Agents)
 
-For PRs where `has_failures == true`, apply the following triage rules **in order** to determine the diagnosis.
+For each PR with `check_status == "has_failures"`, spawn a **sub-agent** to diagnose and optionally fix it. This prevents context window exhaustion when processing many failing PRs.
 
-### Rule 1: Check `go.mod` Changes (Dependency-Only Upgrade)
+### Sub-Agent Architecture
 
-Determine if the PR is a pure dependency upgrade by examining what files changed:
+Each sub-agent:
+1. Receives the PR metadata (from Phase 2 output)
+2. Reads `workflows/weekly-bot-pr-report/diagnose_pr.md` for its instructions
+3. Applies failure patterns from `workflows/weekly-bot-pr-report/failure-patterns/` **in order** (FP-01 → FP-02 → FP-03)
+4. First match wins — stops checking after a pattern matches
+5. For patterns requiring clone (FP-01, FP-03): uses the `clone-worktree` skill to check out code, attempt fix, push patch
+6. Writes result to `.output/diagnoses/pr-<NUMBER>.json`
 
-```bash
-gh pr diff <PR_NUMBER> -R <REPO_OWNER/REPO_NAME> --name-only
+### Spawning Sub-Agents
+
+Use the Task tool to spawn each sub-agent:
+
+```
+For each PR with has_failures:
+  Task(
+    subagent_type: "general-purpose",
+    description: "Diagnose PR <repo>#<number>",
+    prompt: "Read workflows/weekly-bot-pr-report/diagnose_pr.md for instructions.
+             Here is the PR data: <PR_JSON>.
+             Diagnose this PR and write the result to .output/diagnoses/pr-<NUMBER>.json"
+  )
 ```
 
-A PR is a **dependency-only upgrade** if the changed files consist exclusively of:
+**Parallelism**: Spawn up to 3-5 sub-agents concurrently to speed up diagnosis. Each operates independently on its own PR.
 
-- `go.mod`
-- `go.sum`
-- `vendor/` directory files
-- RPM lockfiles (e.g., `rpms.lock.yaml`, `rpm_lockfile.yaml`)
-- Konflux pipeline/config files (e.g., `.tekton/`, `.konflux/`)
+**Fork detection**: Sub-agents check `is_fork` before cloning. If true, skip with `skipped-fork`.
 
-If a PR modifies source code files (`.go` files outside `vendor/`, Makefiles, Dockerfiles, etc.),
-it is NOT a pure dependency upgrade and requires closer review.
+### Diagnosis Result Schema
 
-**Why this matters**: Pure dependency upgrades have predictable failure patterns. Build or test
-failures on a dependency-only PR usually indicate an incompatible API change in the upstream
-dependency, not a bug in our code.
+Each sub-agent writes a JSON file to `.output/diagnoses/pr-<NUMBER>.json`:
 
-### Rule 2: Check Image Build Status
+```json
+{
+  "pr_number": 123,
+  "repo": "stolostron/ocm",
+  "url": "https://github.com/stolostron/ocm/pull/123",
+  "title": "Update golang.org/x/crypto",
+  "author": "red-hat-konflux",
+  "branch": "backplane-2.9",
+  "age_days": 5,
+  "pattern_matched": "go-version-mismatch | e2e-cluster-pool | build-failure | none | unknown",
+  "action": "recommend-merge | patched | retest | needs-manual | skipped-fork | pending",
+  "action_details": "Human-readable description of what was found/done",
+  "failed_checks": ["ci/prow/images", "ci/prow/e2e"],
+  "is_fork": false
+}
+```
 
-For each PR, check if the **image build** CI check passed:
+### Report Categories
 
-- Look for checks matching: `ci/prow/images` or `*-on-pull-request` (Konflux pipeline build)
-- If `ci/prow/images` has status `fail` → the basic build is broken, this is a **core failure**
-- If Konflux `*-on-pull-request` checks all fail → Konflux build pipeline is broken
-
-**Why this matters**: If the image build itself fails, the dependency upgrade introduced a
-compile-time incompatibility. This is a fundamental problem that blocks everything else
-(tests, e2e, integration all depend on a successful build).
-
-### 3.1 Assign Diagnosis
-
-Combine the rules into a diagnosis for each failing PR:
-
-| Diagnosis | Condition |
-|-----------|-----------|
-| **Build Broken** | Rule 2 fails: `ci/prow/images` is `fail`. This is the most critical — the code does not compile. |
-| **Dependency Incompatible** | Rule 1 confirms dependency-only + Rule 2 (images) passes, but tests fail. The dependency upgrade compiles but breaks tests. |
-| **Konflux Pipeline Issue** | Prow checks pass but Konflux `*-on-pull-request` checks fail. Likely a Konflux infra issue, not a code issue. |
-| **Test Failures Only** | Images build passes, non-dependency files changed, tests fail. Needs manual investigation. |
-| **Pending** | Checks are still running — revisit later. |
+| Category | Meaning | Source |
+|----------|---------|--------|
+| **Recommend Merge** | All checks passed | Pre-diagnosis filter |
+| **Auto-Patched** | Agent found and pushed a fix | Sub-agent, FP-01 or FP-03 |
+| **Recommend Retest** | Infra issue, just needs `/retest` | Sub-agent, FP-02 |
+| **Needs Manual** | Agent could not fix automatically | Sub-agent, default |
+| **Skipped (Fork)** | Cross-repo PR, can't push | Sub-agent, fork detection |
+| **Pending** | Checks still running | Pre-diagnosis filter |
 
 ---
 
 ## Phase 4: Generate Report
 
-Produce the report in Markdown using the exact section order and format below.
+After all sub-agents complete, generate the Markdown report from collected diagnosis results:
 
-### Report Template
-
-```
-# Server Foundation Weekly Bot PR Report — {YYYY-MM-DD}
-
-## Executive Summary
-
-- **Total open bot PRs:** {N}
-- **All checks passed (ready to merge):** {n}
-- **Has failures:** {n}
-- **Still pending:** {n}
-- **Bot author breakdown:** red-hat-konflux ({n}), dependabot ({n}), ...
-
----
-
-## Ready to Merge
-
-These bot PRs have all CI checks passing. Recommend adding `approved` + `lgtm` labels to merge.
-
-| PR | Repository | Branch | Title | Age (days) | Checks |
-|----|------------|--------|-------|------------|--------|
-| [#123](url) | repo-name | backplane-2.9 | Update golang.org/x/crypto | 5 | All pass |
-
-> If empty: "No bot PRs are currently ready to merge."
-
----
-
-## Needs Investigation
-
-Bot PRs with CI failures, grouped by diagnosis.
-
-### Build Broken (Critical)
-
-The image build failed — the dependency upgrade introduced a compile-time incompatibility.
-
-| PR | Repository | Branch | Title | Diagnosis Details | Failed Checks |
-|----|------------|--------|-------|-------------------|---------------|
-| [#123](url) | repo-name | backplane-2.6 | Update helm.sh/helm/v3 | go.mod only, images fail | ci/prow/images, ci/prow/e2e, ... |
-
-### Dependency Incompatible
-
-The build passes but tests fail. The dependency compiles but has API/behavior changes.
-
-| PR | Repository | Branch | Title | Failed Checks |
-|----|------------|--------|-------|---------------|
-
-### Konflux Pipeline Issue
-
-Prow CI passes but Konflux pipeline checks fail. Likely infrastructure, not code.
-
-| PR | Repository | Branch | Title | Prow Status | Konflux Failed |
-|----|------------|--------|-------|-------------|----------------|
-| [#123](url) | repo-name | backplane-2.6 | Update x/crypto | All pass | on-pull-request, enterprise-contract |
-
-### Test Failures Only
-
-Image build passes but tests fail. Requires manual investigation.
-
-| PR | Repository | Branch | Title | Failed Checks |
-|----|------------|--------|-------|---------------|
-
-### Still Pending
-
-Checks are still running. Revisit later.
-
-| PR | Repository | Branch | Title | Pending Checks |
-|----|------------|--------|-------|----------------|
-
-> Only show sub-sections that have PRs.
-
----
-
-## Per-Repository Summary
-
-| Repository | Total | Ready | Build Broken | Dep Incompatible | Konflux Issue | Test Fail | Pending |
-|------------|-------|-------|--------------|-------------------|---------------|-----------|---------|
-| org/repo | 7 | 0 | 4 | 0 | 2 | 0 | 1 |
-
-> Sort by Total descending.
-
----
-
-## Per-Branch Summary
-
-| Branch | Total | Ready | Build Broken | Dep Incompatible | Konflux Issue | Test Fail | Pending |
-|--------|-------|-------|--------------|-------------------|---------------|-----------|---------|
-| backplane-2.6 | 5 | 1 | 2 | 0 | 2 | 0 | 0 |
-| backplane-2.9 | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
-
-> Extract branch from PR title (text in parentheses at end, e.g., "(backplane-2.9)") or from the head branch name.
-> Sort by branch version descending (newest first).
+```bash
+python3 workflows/weekly-bot-pr-report/generate_report.py .output/diagnoses/ .output/bot_pr_report.md
 ```
 
-### Formatting Rules
+The script reads all `pr-*.json` files from the diagnoses directory and produces a report with these sections:
 
-1. **PR links**: Always format as `[#number](url)` — clickable Markdown links
-2. **Repository names**: Use short form `org/repo` from `repository.nameWithOwner`
-3. **Branch**: Extract from PR title parentheses or head branch name
-4. **Dates**: Report date is today's date in `YYYY-MM-DD` format
-5. **Age**: Integer days since `createdAt`, computed as `floor((today - createdAt) / 86400)`
-6. **Failed Checks**: Comma-separated list of failed check names (short form, e.g., `images`, `e2e`, `unit`)
-7. **Empty sections**: Show section header with "If empty" message — never omit sections
-8. **Sorting within tables**: Sort by repository, then branch version descending
+1. Executive Summary (total, by category, by bot author)
+2. Recommend Merge
+3. Auto-Patched (with pattern matched and details)
+4. Recommend Retest
+5. Needs Manual Intervention (with failed checks and details)
+6. Skipped (Fork PRs)
+7. Pending
+8. Per-Repository Summary
+9. Per-Branch Summary
 
 ---
 
-## Phase 5: Distribute (optional)
+## Phase 5: Distribute
 
-If the user requests Slack notification, invoke the `slack-notify` skill with the generated Markdown report.
+Generate the Slack payload and send it:
 
-**Dependency**: `.claude/skills/slack-notify/SKILL.md`
+```bash
+python3 workflows/weekly-bot-pr-report/generate_slack_payload.py .output/diagnoses/ .output/bot_slack_payload.json
+bash .claude/skills/slack-notify/send_to_slack.sh .output/bot_slack_payload.json
+```
+
+**Dependencies**:
+- `workflows/weekly-bot-pr-report/generate_slack_payload.py`
+- `.claude/skills/slack-notify/send_to_slack.sh`
+
+### Slack Message Structure
+
+- **Header**: Robot emoji + "Bot PR Report — YYYY-MM-DD"
+- **Summary**: Total PRs, health percentage (resolved/total), counts per category
+- **Sections**: Recommend Merge, Auto-Patched, Recommend Retest, Needs Manual (max 3 examples each)
+- **Context footer**: Generation timestamp
+
+### Health Score
+
+Health = percentage of PRs resolved (merge + patched + retest) vs total:
+- 60%+ = green heart
+- 40-59% = yellow heart
+- <40% = red heart
+
+---
+
+## Failure Patterns
+
+Failure patterns are defined in `workflows/weekly-bot-pr-report/failure-patterns/` and applied in numeric order. Each pattern has a structured format with Detection, Fix Procedure, and Verification sections.
+
+| ID | Pattern | Action on Match | Requires Clone |
+|----|---------|-----------------|----------------|
+| FP-01 | [Go Version Mismatch](weekly-bot-pr-report/failure-patterns/01-go-version-mismatch.md) | `patched` | Yes |
+| FP-02 | [E2E Cluster Pool Claim](weekly-bot-pr-report/failure-patterns/02-e2e-cluster-pool.md) | `retest` | No |
+| FP-03 | [Build Failure](weekly-bot-pr-report/failure-patterns/03-build-failure.md) | `patched` | Yes |
+
+To add a new failure pattern:
+1. Create `workflows/weekly-bot-pr-report/failure-patterns/NN-pattern-name.md`
+2. Follow the frontmatter format (`id`, `name`, `action_on_match`, `requires_clone`)
+3. Include Detection, Fix Procedure, and Verification sections
+4. Add the pattern to the table above and to `diagnose_pr.md`
 
 ---
 
 ## Edge Cases
 
-- **PR with no checks reported**: `gh pr checks` returns empty — treat as "Pending" and note it.
-- **PR with only `tide` pending**: If the only non-pass check is `tide` (which requires labels), treat as "All pass".
-- **Checks still running**: If any check is `pending`, classify PR as "Still Pending" regardless of other pass/fail results.
-- **Multiple bot authors**: Group by bot author in the executive summary but analyze all together.
-- **Monorepo PRs (e.g., stolostron/ocm)**: A single PR may trigger checks for multiple components (addon-manager, placement, registration, etc.). All component checks must pass for the PR to be "ready".
-- **`renovate/artifacts` check**: This is a Renovate-specific artifact update check. If it fails, note it but do not treat it as a build failure — it indicates Renovate could not auto-update lock files.
-- **`SonarCloud Code Analysis`**: This is a code quality check. Ignore it for pass/fail classification — it almost always passes for bot PRs.
+- **PR with no checks reported**: `gh pr checks` returns empty — treat as "Pending" (no_checks).
+- **PR with only `tide` pending**: If the only non-pass check is `tide`, treat as "All pass".
+- **`renovate/artifacts` check**: Note but do not treat as build failure — indicates Renovate could not auto-update lock files.
+- **`SonarCloud Code Analysis`**: Excluded from classification — code quality check, not build.
+- **Monorepo PRs (e.g., stolostron/ocm)**: A single PR may trigger checks for multiple components. All must pass.
+- **Fork PRs (`isCrossRepository`)**: Sub-agent detects and skips — cannot push to external forks.
+- **Checks still running**: If `check_status` is `mixed` (some pass, some pending, no failures), classify as Pending.
 
 ## Performance Notes
 
-- Phase 2 makes one `gh pr checks` call per PR — for 14 PRs this takes ~10 seconds
-- Use `gh pr diff --name-only` (not full diff) to minimize API data transfer
+- Phase 2 makes one `gh pr checks` call per PR — runs sequentially to avoid GitHub API rate limiting
+- Phase 3 sub-agents run in parallel (up to 3-5 concurrent) for faster diagnosis
+- Use `gh pr diff --name-only` (not full diff) to minimize API data transfer in sub-agents
 - Cache from `fetch-prs` skill is reused if within TTL — do NOT use `nocache` unless user requests it
-- Run `gh pr checks` calls sequentially to avoid GitHub API rate limiting

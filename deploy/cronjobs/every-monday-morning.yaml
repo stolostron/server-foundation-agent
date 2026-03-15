@@ -1,6 +1,6 @@
 # CronJob: Every Monday Morning
 # Creates a Task for each workflow in the list
-# Schedule: Monday 09:00 CST (UTC+8) = Monday 01:00 UTC
+# Schedule: Monday 06:00 CST (UTC+8) = Sunday 22:00 UTC
 # Test:
 #   kubectl create job test-monday-morning --from=cronjob/every-monday-morning-cron -n server-foundation
 #   kubectl get jobs -n server-foundation -l job-name=test-monday-morning
@@ -14,8 +14,8 @@ metadata:
     app.kubernetes.io/part-of: server-foundation-agent
     app.kubernetes.io/component: scheduler
 spec:
-  # Monday 09:00 CST (UTC+8) = Monday 01:00 UTC
-  schedule: "0 1 * * 1"
+  # Monday 06:00 CST (UTC+8) = Sunday 22:00 UTC
+  schedule: "0 22 * * 0"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
