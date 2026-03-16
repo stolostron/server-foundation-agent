@@ -14,13 +14,16 @@ E2E tests fail because the cluster pool has no available clusters to claim. This
 1. Check if any failed check name contains `e2e` (case-insensitive).
 2. If yes, get the check run link from the `all_checks` data for the failed e2e check.
 3. Fetch the log page at the check link URL. Look for any of these indicators:
+   - `claim provisioning failed`
+   - `Claim` with `from ClusterPool` and `failed`
+   - `No cluster was checked out`
    - `ClusterClaim` with `failed` or `error`
    - `no available clusters`
    - `claim` with `timeout` or `timed out`
    - `waiting for cluster` with `timeout`
    - `pool` with `exhausted` or `unavailable`
 
-**Match condition**: A failed e2e check exists AND the log contains cluster pool claim failure indicators.
+**Match condition**: A failed e2e check exists AND the log contains at least one cluster pool claim failure indicator from the list above.
 
 **Note**: If the e2e check failed but the log does NOT contain cluster pool indicators, this pattern does NOT match — fall through to the next pattern.
 
