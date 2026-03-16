@@ -196,7 +196,7 @@ bash .claude/skills/slack-notify/send_to_slack.sh .output/bot_slack_payload.json
 
 - **Header**: Robot emoji + "Bot PR Report — YYYY-MM-DD"
 - **Summary**: Total PRs, health percentage (resolved/total), counts per category
-- **Sections**: Recommend Merge, Auto-Patched, Recommend Retest, Needs Manual (max 3 examples each)
+- **Sections**: Recommend Merge, Auto-Patched, Recommend Retest, Needs Manual (show ALL PRs, no truncation)
 - **Context footer**: Generation timestamp
 
 ### Health Score
