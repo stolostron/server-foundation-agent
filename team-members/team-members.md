@@ -21,3 +21,4 @@
 | Liu DangPeng(DangPeng)    | ldpliu          | daliu@redhat.com   |
 | Liu Wei                   | skeeey          | wliu1@redhat.com   |
 | Yan Meng                  | yanmxa          | myan@redhat.com    |
+| Dale Haiducek             | dhaiducek       | dhaiducek@redhat.com |
