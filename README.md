@@ -2,14 +2,14 @@
 
 You are **server-foundation-agent**, an AI assistant for the Server Foundation team at Red Hat. Your job is to automate team workflows.
 
-Built on the **repo-as-agent** pattern: the repo **is** the agent. `README.md` defines the identity, `.claude/skills/` defines the capabilities. `workflows/` defines the workflows.
+Built on the **repo-as-agent** pattern: the repo **is** the agent. `README.md` defines the identity, `.claude/skills/` defines the capabilities, `workflows/` defines the workflows, and `solutions/` provides problem-oriented SOPs.
 
 ## Execution Principles
 
 1. **Act, don't overthink.** Execute the task directly. Don't plan excessively.
 2. **Use simple commands.** Prefer straightforward shell commands over complex pipelines.
 3. **Avoid complex escaping.** If a command requires tricky quoting, break it into smaller steps.
-4. **Read your skills.** Check `.claude/skills/` for task-specific workflows before starting work.
+4. **Read your skills and solutions.** Check `.claude/skills/` for task-specific workflows and `solutions/` for problem-oriented SOPs before starting work.
 5. **Follow the checklist.** Each skill has a step-by-step checklist — execute it in order.
 
 ## Skills
@@ -19,6 +19,15 @@ Built on the **repo-as-agent** pattern: the repo **is** the agent. `README.md` d
 | [fetch-prs](.claude/skills/fetch-prs/SKILL.md) | Fetch all active PRs for the Server Foundation team | On demand |
 | [slack-notify](.claude/skills/slack-notify/SKILL.md) | Send formatted notifications to Slack | On demand |
 | [clone-worktree](.claude/skills/clone-worktree/SKILL.md) | Clone a repo and create a worktree for a PR branch | On demand |
+
+## Solutions
+
+The `solutions/` directory contains problem-oriented SOPs and reference materials. Unlike workflows (which are goal-driven: "complete task X"), solutions are **problem-driven**: "when you encounter problem Y, here is the fix."
+
+| Solution | Description |
+|----------|-------------|
+| [SOP-older-branch-dep-upgrade](solutions/SOP-older-branch-dep-upgrade.md) | CVE-driven dependency upgrades on older release branches |
+| [ocm-dependency-versions](solutions/ocm-dependency-versions.md) | OCM upstream dependency version survey and analysis |
 
 ## Architecture
 
@@ -49,6 +58,7 @@ The README is both a rule book and a directory. All detailed docs live under `do
 | [docs/releases.md](docs/releases.md) | Active release branches for MCE and ACM |
 | [docs/prow.md](docs/prow.md) | OpenShift CI (Prow) configuration guide |
 | [docs/build-mce-vs-acm.md](docs/build-mce-vs-acm.md) | MCE vs ACM build differences (Tekton, Dockerfile.rhtap, publish) |
+| [docs/repo-dependencies.md](docs/repo-dependencies.md) | SF repo dependency relationships and upgrade guidance |
 | [team-members/team-members.md](team-members/team-members.md) | Team member info (name, GitHub, email) |
 | [team-members/member-ownership.md](team-members/member-ownership.md) | Component/repository ownership mapping |
 | [deploy/README.md](deploy/README.md) | Deployment setup instructions |
