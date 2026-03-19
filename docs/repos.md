@@ -4,6 +4,8 @@ All Server Foundation owned repositories are added as **read-only** git submodul
 
 For active branch and version mapping information, see [releases.md](releases.md).
 
+For inter-repository dependency analysis and diagrams, see [repo-dependencies.md](repo-dependencies.md).
+
 ## Build Context
 
 Server Foundation components ship in two products:
@@ -23,7 +25,7 @@ Use the helper script to manage submodules:
 ./scripts/sync-repos.sh --update
 ```
 
-## stolostron
+## stolostron (`repos/server-foundation/stolostron/`)
 
 ### MCE Components (`backplane-*` branches)
 
@@ -45,13 +47,13 @@ Use the helper script to manage submodules:
 | [cluster-permission](https://github.com/stolostron/cluster-permission) | Cluster permission management |
 | [multicluster-role-assignment](https://github.com/stolostron/multicluster-role-assignment) | Multicluster RBAC |
 
-### Dependency Components (not owned by SF, but tightly coupled)
+### Dependency Components (`repos/installer/`, not owned by SF, but tightly coupled)
 
 | Repository | Description |
 |------------|-------------|
 | [backplane-operator](https://github.com/stolostron/backplane-operator) | Installs all MCE/Foundation components into ACM |
 
-## open-cluster-management-io (upstream)
+## open-cluster-management-io (`repos/server-foundation/ocm-io/`, upstream)
 
 | Repository | Description |
 |------------|-------------|
@@ -63,8 +65,10 @@ Use the helper script to manage submodules:
 | [managed-serviceaccount](https://github.com/open-cluster-management-io/managed-serviceaccount) | Managed ServiceAccount (upstream) |
 | [cluster-permission](https://github.com/open-cluster-management-io/cluster-permission) | Cluster permission (upstream) |
 
-## openshift (CI/Release)
+## Build / CI (`repos/build/`)
 
 | Repository | Description |
 |------------|-------------|
-| [release](https://github.com/openshift/release) | OpenShift CI release configuration (prow jobs, configs) |
+| [openshift/release](https://github.com/openshift/release) | OpenShift CI release configuration (prow jobs, configs) |
+| [stolostron/konflux-build-catalog](https://github.com/stolostron/konflux-build-catalog) | Konflux build catalog for stolostron |
+| [stolostron/acm-infra](https://github.com/stolostron/acm-infra) | ACM infrastructure and build tooling |

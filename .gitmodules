@@ -1,57 +1,63 @@
 [submodule "repos/stolostron/ocm"]
-	path = repos/stolostron/ocm
+	path = repos/server-foundation/stolostron/ocm
 	url = https://github.com/stolostron/ocm.git
 [submodule "repos/stolostron/managedcluster-import-controller"]
-	path = repos/stolostron/managedcluster-import-controller
+	path = repos/server-foundation/stolostron/managedcluster-import-controller
 	url = https://github.com/stolostron/managedcluster-import-controller.git
 [submodule "repos/stolostron/multicloud-operators-foundation"]
-	path = repos/stolostron/multicloud-operators-foundation
+	path = repos/server-foundation/stolostron/multicloud-operators-foundation
 	url = https://github.com/stolostron/multicloud-operators-foundation.git
 [submodule "repos/stolostron/cluster-proxy"]
-	path = repos/stolostron/cluster-proxy
+	path = repos/server-foundation/stolostron/cluster-proxy
 	url = https://github.com/stolostron/cluster-proxy.git
 [submodule "repos/stolostron/clusterlifecycle-state-metrics"]
-	path = repos/stolostron/clusterlifecycle-state-metrics
+	path = repos/server-foundation/stolostron/clusterlifecycle-state-metrics
 	url = https://github.com/stolostron/clusterlifecycle-state-metrics.git
 [submodule "repos/stolostron/managed-serviceaccount"]
-	path = repos/stolostron/managed-serviceaccount
+	path = repos/server-foundation/stolostron/managed-serviceaccount
 	url = https://github.com/stolostron/managed-serviceaccount.git
 [submodule "repos/stolostron/klusterlet-addon-controller"]
-	path = repos/stolostron/klusterlet-addon-controller
+	path = repos/server-foundation/stolostron/klusterlet-addon-controller
 	url = https://github.com/stolostron/klusterlet-addon-controller.git
 [submodule "repos/stolostron/cluster-permission"]
-	path = repos/stolostron/cluster-permission
+	path = repos/server-foundation/stolostron/cluster-permission
 	url = https://github.com/stolostron/cluster-permission.git
 [submodule "repos/stolostron/multicluster-role-assignment"]
-	path = repos/stolostron/multicluster-role-assignment
+	path = repos/server-foundation/stolostron/multicluster-role-assignment
 	url = https://github.com/stolostron/multicluster-role-assignment.git
 [submodule "repos/stolostron/cluster-proxy-addon"]
-	path = repos/stolostron/cluster-proxy-addon
+	path = repos/server-foundation/stolostron/cluster-proxy-addon
 	url = https://github.com/stolostron/cluster-proxy-addon.git
 [submodule "repos/ocm-io/ocm"]
-	path = repos/ocm-io/ocm
+	path = repos/server-foundation/ocm-io/ocm
 	url = https://github.com/open-cluster-management-io/ocm.git
 [submodule "repos/ocm-io/addon-framework"]
-	path = repos/ocm-io/addon-framework
+	path = repos/server-foundation/ocm-io/addon-framework
 	url = https://github.com/open-cluster-management-io/addon-framework.git
 [submodule "repos/ocm-io/sdk-go"]
-	path = repos/ocm-io/sdk-go
+	path = repos/server-foundation/ocm-io/sdk-go
 	url = https://github.com/open-cluster-management-io/sdk-go.git
 [submodule "repos/ocm-io/api"]
-	path = repos/ocm-io/api
+	path = repos/server-foundation/ocm-io/api
 	url = https://github.com/open-cluster-management-io/api.git
 [submodule "repos/ocm-io/cluster-proxy"]
-	path = repos/ocm-io/cluster-proxy
+	path = repos/server-foundation/ocm-io/cluster-proxy
 	url = https://github.com/open-cluster-management-io/cluster-proxy.git
 [submodule "repos/ocm-io/managed-serviceaccount"]
-	path = repos/ocm-io/managed-serviceaccount
+	path = repos/server-foundation/ocm-io/managed-serviceaccount
 	url = https://github.com/open-cluster-management-io/managed-serviceaccount.git
 [submodule "repos/ocm-io/cluster-permission"]
-	path = repos/ocm-io/cluster-permission
+	path = repos/server-foundation/ocm-io/cluster-permission
 	url = https://github.com/open-cluster-management-io/cluster-permission.git
 [submodule "repos/stolostron/backplane-operator"]
-	path = repos/stolostron/backplane-operator
+	path = repos/installer/stolostron/backplane-operator
 	url = https://github.com/stolostron/backplane-operator.git
 [submodule "repos/openshift/release"]
-	path = repos/openshift/release
+	path = repos/build/openshift/release
 	url = https://github.com/openshift/release.git
+[submodule "repos/build/stolostron/konflux-build-catalog"]
+	path = repos/build/stolostron/konflux-build-catalog
+	url = https://github.com/stolostron/konflux-build-catalog.git
+[submodule "repos/build/stolostron/acm-infra"]
+	path = repos/build/stolostron/acm-infra
+	url = https://github.com/stolostron/acm-infra.git
