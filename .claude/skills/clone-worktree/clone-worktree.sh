@@ -49,7 +49,7 @@ usage() {
     echo "Arguments:" >&2
     echo "  org/repo    - Full repository name (e.g., stolostron/ocm)" >&2
     echo "  pr-number   - PR number to check out" >&2
-    echo "  base-dir    - Base directory for clones (default: repos/)" >&2
+    echo "  base-dir    - Base directory for clones (default: workspaces/)" >&2
     echo "" >&2
     echo "Options:" >&2
     echo "  --remove    - Remove a worktree and its local branch" >&2
@@ -232,7 +232,7 @@ fi
 
 REPO_FULL="$1"
 PR_NUMBER="$2"
-BASE_DIR="${3:-repos}"
+BASE_DIR="${3:-workspaces}"
 
 # Validate repo format (must contain exactly one slash)
 if [[ ! "$REPO_FULL" =~ ^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$ ]]; then

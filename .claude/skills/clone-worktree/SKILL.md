@@ -41,7 +41,7 @@ Use this skill when:
 |-----------|----------|---------|-------------|
 | `org/repo` | Yes | — | Full repository name (e.g., `stolostron/ocm`) |
 | `pr-number` | Yes | — | PR number to check out |
-| `base-dir` | No | `repos/` | Base directory for clones and worktrees |
+| `base-dir` | No | `workspaces/` | Base directory for clones and worktrees |
 
 ## Output
 
@@ -50,7 +50,7 @@ On success, prints the **absolute path** to the worktree directory on stdout. Al
 ### Directory Layout
 
 ```
-repos/
+workspaces/
   stolostron/
     ocm.git/                     # bare clone (git database only)
     ocm-worktrees/
