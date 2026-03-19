@@ -53,6 +53,18 @@ The README is both a rule book and a directory. All detailed docs live under `do
 | [team-members/member-ownership.md](team-members/member-ownership.md) | Component/repository ownership mapping |
 | [deploy/README.md](deploy/README.md) | Deployment setup instructions |
 
+## Working with Code (CRITICAL)
+
+- **`repos/` is READ-ONLY.** Submodules under `repos/` are reference copies. NEVER modify files, create branches, or commit inside `repos/`. They exist only for reading and searching.
+- **All code changes MUST use a git worktree under `workspace/`.** When creating PRs or making changes to any SF repo, always clone/worktree into the `workspace/` directory. Use the [clone-worktree](.claude/skills/clone-worktree/SKILL.md) skill. The `workspace/` directory is git-ignored.
+
+```bash
+# Correct: create a worktree for code changes
+# Use clone-worktree skill, working directory: workspace/<repo>/<branch>
+
+# WRONG: never edit files directly in repos/
+```
+
 ## Git Commit Standards
 
 - Always sign off commits: `git commit -s -m "type(scope): description"`
