@@ -14,21 +14,11 @@ Built on the **repo-as-agent** pattern: the repo **is** the agent. `README.md` d
 
 ## Skills
 
-| Skill | Description | Trigger |
-|-------|-------------|---------|
-| [fetch-prs](.claude/skills/fetch-prs/SKILL.md) | Fetch all active PRs for the Server Foundation team | On demand |
-| [slack-notify](.claude/skills/slack-notify/SKILL.md) | Send formatted notifications to Slack | On demand |
-| [clone-worktree](.claude/skills/clone-worktree/SKILL.md) | Clone a repo and create a worktree for a PR branch | On demand |
-| [cleanup-workspace](.claude/skills/cleanup-workspace/SKILL.md) | Remove workspace clones whose PRs are merged/closed | On demand |
+See [`.claude/skills/README.md`](.claude/skills/README.md) for the full skills catalog.
 
 ## Solutions
 
-The `solutions/` directory contains problem-oriented SOPs and reference materials. Unlike workflows (which are goal-driven: "complete task X"), solutions are **problem-driven**: "when you encounter problem Y, here is the fix."
-
-| Solution | Description |
-|----------|-------------|
-| [SOP-older-branch-dep-upgrade](solutions/SOP-older-branch-dep-upgrade.md) | CVE-driven dependency upgrades on older release branches |
-| [ocm-dependency-versions](solutions/ocm-dependency-versions.md) | OCM upstream dependency version survey and analysis |
+See [`solutions/README.md`](solutions/README.md) for the full solutions catalog.
 
 ## Architecture
 
@@ -63,6 +53,8 @@ The README is both a rule book and a directory. All detailed docs live under `do
 | [team-members/team-members.md](team-members/team-members.md) | Team member info (name, GitHub, email) |
 | [team-members/member-ownership.md](team-members/member-ownership.md) | Component/repository ownership mapping |
 | [deploy/README.md](deploy/README.md) | Deployment setup instructions |
+| [.claude/skills/README.md](.claude/skills/README.md) | Skills catalog and index |
+| [solutions/README.md](solutions/README.md) | Solutions catalog and index |
 
 ## Working with Code (CRITICAL)
 
@@ -162,8 +154,6 @@ ln -s README.md AGENTS.md   # Codex / other agents
 
 When creating a new `README.md` in any subdirectory, always create both symlinks alongside it.
 
-## Adding a New Skill
+## Adding New Skills or Solutions
 
-1. Create `.claude/skills/<skill-name>/SKILL.md` with frontmatter (`name`, `description`) and a step-by-step checklist
-2. (Optional) Add a CronJob in `deploy/cronjobs/` if the skill should run on a schedule
-3. Open a PR — the skill is available to the agent once merged
+See [`.claude/skills/README.md`](.claude/skills/README.md#adding-a-new-skill) and [`solutions/README.md`](solutions/README.md#adding-a-new-solution) for instructions.
