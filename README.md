@@ -19,6 +19,7 @@ Built on the **repo-as-agent** pattern: the repo **is** the agent. `README.md` d
 | [fetch-prs](.claude/skills/fetch-prs/SKILL.md) | Fetch all active PRs for the Server Foundation team | On demand |
 | [slack-notify](.claude/skills/slack-notify/SKILL.md) | Send formatted notifications to Slack | On demand |
 | [clone-worktree](.claude/skills/clone-worktree/SKILL.md) | Clone a repo and create a worktree for a PR branch | On demand |
+| [cleanup-workspace](.claude/skills/cleanup-workspace/SKILL.md) | Remove workspace clones whose PRs are merged/closed | On demand |
 
 ## Solutions
 

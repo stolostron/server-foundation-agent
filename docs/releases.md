@@ -1,8 +1,12 @@
 # Active Releases & Branch Mapping
 
-## MCE (Multicluster Engine) — `backplane-*` branches
+## Version Unification (2.17+)
 
-MCE components use `backplane-X.Y` branches. `main` fast-forwards to the next unreleased version.
+Starting from **2.17**, MCE and ACM versions are unified. There is no separate `backplane-2.12` or MCE 2.12 — the unified versioning begins at 2.17. Both MCE and ACM repos use `release-2.17` branches going forward.
+
+## MCE (Multicluster Engine) — `backplane-*` branches (legacy, ≤ 2.11)
+
+MCE components use `backplane-X.Y` branches. These branches are legacy; no new `backplane-*` branches will be created after 2.11.
 
 | Branch | Status |
 |--------|--------|
@@ -11,8 +15,6 @@ MCE components use `backplane-X.Y` branches. `main` fast-forwards to the next un
 | backplane-2.9 | Active |
 | backplane-2.10 | Active |
 | backplane-2.11 | Active |
-| backplane-2.12 | Active |
-| main | Development (fast-forwards to backplane-2.17) |
 
 ### Per-repo notes
 
@@ -20,7 +22,7 @@ MCE components use `backplane-X.Y` branches. `main` fast-forwards to the next un
 
 ## ACM (Advanced Cluster Management) — `release-*` branches
 
-ACM components use `release-X.Y` branches. MCE is a subset of ACM.
+ACM components use `release-X.Y` branches. MCE is a subset of ACM. Starting from 2.17, MCE repos also use `release-*` branches.
 
 | Branch | Status |
 |--------|--------|
@@ -29,7 +31,8 @@ ACM components use `release-X.Y` branches. MCE is a subset of ACM.
 | release-2.14 | Active |
 | release-2.15 | Active |
 | release-2.16 | Active |
-| main | Development (fast-forwards to release-2.17) |
+| release-2.17 | Latest (unified MCE + ACM) |
+| main | Development (fast-forwards to next release) |
 
 ### Per-repo notes
 
