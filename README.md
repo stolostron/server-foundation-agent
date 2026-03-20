@@ -68,6 +68,7 @@ The README is both a rule book and a directory. All detailed docs live under `do
 ```
 
 - **Branch from the correct upstream.** SF repos exist in two GitHub orgs: `open-cluster-management-io` (OCM community) and `stolostron` (Red Hat downstream). Their `main` branches **diverge** — stolostron repos contain extra files (`.tekton/`, `Dockerfile.rhtap`, etc.) that don't exist in OCM-IO. When creating a PR, always checkout the feature branch from the **target repo's branch** (e.g., `git checkout -b feature upstream/main`), NOT from the fork's `main`. Otherwise the PR diff will include unrelated commits from the diverged fork.
+- **Choose the correct target org by task type.** Feature PRs (new APIs, new controller logic) target **`open-cluster-management-io`** (OCM). Maintenance PRs (dependency upgrades, CI fixes) and backport PRs target **`stolostron`**. When the target is ambiguous, ask the user before proceeding. See the [Development Guide](docs/development-guide.md#pr-target-ocm-vs-stolostron) for the full decision table.
 
 ```bash
 # Example: PR targeting open-cluster-management-io/cluster-permission

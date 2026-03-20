@@ -63,6 +63,20 @@ This makes it easy to identify backport or release-specific PRs at a glance.
 - Use `gh repo fork <upstream> --clone=false` to ensure a fork exists before cloning.
 - Never push branches directly to upstream repos.
 
+### PR Target: OCM vs Stolostron
+
+Many SF repos exist in both the `open-cluster-management-io` (OCM community) and `stolostron` (Red Hat downstream) GitHub orgs. Their `main` branches **diverge** — stolostron repos contain extra files (`.tekton/`, `Dockerfile.rhtap`, etc.) that don't exist in OCM.
+
+Choose the correct target org based on the task type:
+
+| Task Type | Target Org | Example |
+|-----------|------------|---------|
+| **New feature** | `open-cluster-management-io` (OCM) | Adding a new API field, new controller logic |
+| **Maintenance** (dependency upgrades, CI fixes) | `stolostron` | Bumping go module versions, fixing Prow configs |
+| **Backport** | `stolostron` | Cherry-picking a fix to `release-*` or `backplane-*` branches |
+
+When the target is ambiguous, ask before proceeding — do not assume.
+
 ## GitHub Interaction
 
 - Use `gh` CLI for all GitHub operations (PRs, issues, reviews).
