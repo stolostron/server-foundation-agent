@@ -6,8 +6,9 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 |-------|-------------|---------|
 | [fetch-prs](fetch-prs/SKILL.md) | Fetch all active PRs for the Server Foundation team | On demand |
 | [slack-notify](slack-notify/SKILL.md) | Send formatted notifications to Slack | On demand |
-| [clone-worktree](clone-worktree/SKILL.md) | Clone a repo and create a worktree for a PR branch | On demand |
-| [cleanup-workspace](cleanup-workspace/SKILL.md) | Remove workspace clones whose PRs are merged/closed | On demand |
+| [clone-worktree](clone-worktree/SKILL.md) | Clone a repo and create a worktree for a PR or new branch (MUST use for all workspace checkouts) | On demand |
+| [cleanup-workspace](cleanup-workspace/SKILL.md) | Remove workspace worktrees/clones whose PRs are merged/closed | On demand |
+| [sync-repos](sync-repos/SKILL.md) | Initialize or update all submodules under repos/ to latest | On demand |
 
 ## Adding a New Skill
 

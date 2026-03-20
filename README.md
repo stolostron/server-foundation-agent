@@ -50,8 +50,10 @@ The README is both a rule book and a directory. All detailed docs live under `do
 ## Working with Code (CRITICAL)
 
 - **`repos/` is READ-ONLY.** Submodules under `repos/` are reference copies. NEVER modify files, create branches, or commit inside `repos/`. They exist only for reading and searching.
-- **All code changes MUST use a git worktree under `workspace/`.** When creating PRs or making changes to any SF repo, always clone/worktree into the `workspace/` directory. Use the [clone-worktree](.claude/skills/clone-worktree/SKILL.md) skill. The `workspace/` directory is git-ignored.
-- **Always use the fork workflow for PRs.** Clone from the current GitHub user's fork (not the upstream repo). Push to the fork, then create a PR from fork to upstream. Use `gh repo fork --clone=false` to ensure a fork exists, then clone the fork.
+- **All code checkouts MUST use the [clone-worktree](.claude/skills/clone-worktree/SKILL.md) skill.** NEVER use plain `git clone` into `workspace/`. The clone-worktree skill uses bare repos + worktrees, which enables concurrent development on multiple branches of the same repo and supports automated cleanup. The `workspace/` directory is git-ignored.
+  - **Checking out a PR:** `.claude/skills/clone-worktree/clone-worktree.sh <org/repo> <pr-number>`
+  - **Starting new development:** `.claude/skills/clone-worktree/clone-worktree.sh --new <org/repo> <branch-name> [--base <base-branch>]`
+- **Always use the fork workflow for PRs.** The `--new` mode automates this: it ensures your fork exists, branches from upstream, and configures push to your fork. For PR mode, push goes to the upstream repo's branch.
 
 ```bash
 # Correct workflow:
