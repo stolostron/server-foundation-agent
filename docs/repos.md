@@ -47,6 +47,13 @@ Use the helper script to manage submodules:
 | [cluster-permission](https://github.com/stolostron/cluster-permission) | Cluster permission management |
 | [multicluster-role-assignment](https://github.com/stolostron/multicluster-role-assignment) | Multicluster RBAC |
 
+### Dependency Libraries (`repos/deps/`, forked with SF-specific changes)
+
+| Repository | Description |
+|------------|-------------|
+| [apiserver-network-proxy](https://github.com/stolostron/apiserver-network-proxy) | ANP fork, key dependency of cluster-proxy |
+| [grpc-go](https://github.com/stolostron/grpc-go) | gRPC-Go fork, key dependency of cluster-proxy |
+
 ### Dependency Components (`repos/installer/`, not owned by SF, but tightly coupled)
 
 | Repository | Description |

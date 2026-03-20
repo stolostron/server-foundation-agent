@@ -67,3 +67,9 @@
 [submodule "repos/docs/stolostron/rhacm-docs"]
 	path = repos/docs/stolostron/rhacm-docs
 	url = https://github.com/stolostron/rhacm-docs.git
+[submodule "repos/deps/stolostron/apiserver-network-proxy"]
+	path = repos/deps/stolostron/apiserver-network-proxy
+	url = https://github.com/stolostron/apiserver-network-proxy.git
+[submodule "repos/deps/stolostron/grpc-go"]
+	path = repos/deps/stolostron/grpc-go
+	url = https://github.com/stolostron/grpc-go.git
