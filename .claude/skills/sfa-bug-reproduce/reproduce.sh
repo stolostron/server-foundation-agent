@@ -9,6 +9,7 @@ ACM_VERSION=""
 TEST_SCRIPT=""
 AUTO_CLEANUP="true"
 POST_RESULTS="true"
+AUTO_CONFIRM="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -32,6 +33,10 @@ while [[ $# -gt 0 ]]; do
     --post-results)
       POST_RESULTS="$2"
       shift 2
+      ;;
+    --yes|-y)
+      AUTO_CONFIRM="true"
+      shift
       ;;
     *)
       echo "Unknown option: $1"
@@ -120,14 +125,22 @@ echo ""
 # Step 4: Provision ACM
 echo "🚀 Step 4/7: Provisioning ACM $ACM_VERSION..."
 echo ""
-echo "⚠️  This will install ACM on the current cluster: $CLUSTER_NAME"
-echo "   Press Ctrl+C to abort, or Enter to continue..."
-read -r
+
+if [[ "$AUTO_CONFIRM" != "true" ]]; then
+  echo "⚠️  This will install ACM on the current cluster: $CLUSTER_NAME"
+  echo "   Press Ctrl+C to abort, or Enter to continue..."
+  read -r
+fi
 
 echo "  Installing ACM... (this may take 10-15 minutes)"
 
 if [[ -f ".claude/skills/install-acm/scripts/install-acm.sh" ]]; then
-  .claude/skills/install-acm/scripts/install-acm.sh --version "$ACM_VERSION" --wait || {
+  INSTALL_FLAGS="--version $ACM_VERSION --wait"
+  if [[ "$AUTO_CONFIRM" == "true" ]]; then
+    INSTALL_FLAGS="$INSTALL_FLAGS --yes"
+  fi
+
+  .claude/skills/install-acm/scripts/install-acm.sh $INSTALL_FLAGS || {
     echo "❌ ACM installation failed"
     exit 1
   }

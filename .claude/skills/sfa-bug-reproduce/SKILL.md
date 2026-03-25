@@ -19,6 +19,7 @@ This is the Phase 3 automation of the [analyze-bug-reproducibility solution](../
 | test-script | No | - | Path to test script to execute (if not provided, manual testing) |
 | auto-cleanup | No | `true` | Automatically uninstall ACM after reproduction |
 | post-results | No | `true` | Post reproduction results as Jira comment |
+| yes | No | `false` | Skip all interactive confirmations (enables full automation) |
 
 ## Workflow
 
