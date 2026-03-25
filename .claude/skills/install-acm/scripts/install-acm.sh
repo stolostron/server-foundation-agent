@@ -17,6 +17,7 @@ CHANNEL=""
 VERSION=""
 MCE_VERSION=""
 USE_LATEST=false
+AUTO_CONFIRM=false
 KUBECONFIG_PATH="${KUBECONFIG:-}"
 
 # Quay.io registry settings
@@ -51,6 +52,7 @@ parse_args() {
             --pull-secret)   PULL_SECRET="$2"; shift 2 ;;
             --channel)       CHANNEL="$2"; shift 2 ;;
             --latest)        USE_LATEST=true; shift ;;
+            --yes|-y)        AUTO_CONFIRM=true; shift ;;
             -h|--help)       usage; exit 0 ;;
             *) error "Unknown option: $1"; usage; exit 1 ;;
         esac
@@ -72,6 +74,7 @@ Options:
   --pull-secret PATH     Path to pull-secret file for private registries
   --channel CHANNEL      Subscription channel (e.g., release-2.13)
   --latest               Use the latest downstream image for the given version
+  --yes, -y              Skip interactive confirmation (for automation)
   -h, --help             Show this help message
 
 Version Mapping (ACM -> MCE):
@@ -609,6 +612,11 @@ confirm_installation_details() {
         fi
     fi
     echo ""
+
+    # Skip confirmation if auto-confirm is enabled
+    if [[ "$AUTO_CONFIRM" == "true" ]]; then
+        return 0
+    fi
 
     read -rp "Are these details correct? [y/N]: " answer
     if [[ "$answer" != [yY] && "$answer" != [yY][eE][sS] ]]; then
