@@ -961,10 +961,14 @@ main() {
     # Display final summary and confirm
     display_summary
     echo ""
-    read -rp "Proceed with installation? [y/N]: " confirm
-    if [[ "$confirm" != [yY] && "$confirm" != [yY][eE][sS] ]]; then
-        info "Installation cancelled."
-        exit 0
+
+    # Skip final confirmation if auto-confirm is enabled
+    if [[ "$AUTO_CONFIRM" != "true" ]]; then
+        read -rp "Proceed with installation? [y/N]: " confirm
+        if [[ "$confirm" != [yY] && "$confirm" != [yY][eE][sS] ]]; then
+            info "Installation cancelled."
+            exit 0
+        fi
     fi
 
     # Step 3: Configure pull-secret (if needed)
