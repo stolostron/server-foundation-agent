@@ -17,6 +17,8 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-jira-triage](sfa-jira-triage/SKILL.md) | Generate bug triage report (new/unassigned bugs) | On demand |
 | [sfa-jira-sprint-report](sfa-jira-sprint-report/SKILL.md) | Generate sprint health report with per-member breakdown | On demand |
 | [sfa-session-log](sfa-session-log/SKILL.md) | Log session summary to updates.md (what was done, issues, limitations) | On demand |
+| [sfa-cluster-pools](sfa-cluster-pools/SKILL.md) | Manage OCP cluster pools, cluster claims, hibernation, and AWS resource cleanup | On demand |
+| [sfa-prow-config](sfa-prow-config/SKILL.md) | Prow config reference: ACM/MCE/OCP version mappings and SF repo ownership | On demand |
 
 ## Adding a New Skill
 
