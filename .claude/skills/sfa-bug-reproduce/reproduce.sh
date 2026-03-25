@@ -135,7 +135,8 @@ fi
 echo "  Installing ACM... (this may take 10-15 minutes)"
 
 if [[ -f ".claude/skills/install-acm/scripts/install-acm.sh" ]]; then
-  INSTALL_FLAGS="--type downstream --version $ACM_VERSION --latest"
+  # Install MCE (not ACM) for downstream testing
+  INSTALL_FLAGS="--product mce --type downstream --version $ACM_VERSION --latest"
 
   # Use pull-secret if available
   if [[ -f ".output/pull-secret.json" ]]; then
@@ -147,17 +148,17 @@ if [[ -f ".claude/skills/install-acm/scripts/install-acm.sh" ]]; then
   fi
 
   .claude/skills/install-acm/scripts/install-acm.sh $INSTALL_FLAGS || {
-    echo "❌ ACM installation failed"
+    echo "❌ MCE installation failed"
     exit 1
   }
 
-  # Wait for MCH to be ready
+  # Wait for MCE to be ready
   echo ""
-  echo "  Waiting for MCH to be ready..."
-  kubectl wait --for=condition=Complete mch --all -n open-cluster-management --timeout=15m || {
-    echo "⚠️  MCH did not reach Complete state in 15 minutes"
-    echo "   Checking MCH status..."
-    kubectl get mch -n open-cluster-management -o yaml
+  echo "  Waiting for MCE to be ready..."
+  kubectl wait --for=condition=Available mce --all --timeout=15m || {
+    echo "⚠️  MCE did not reach Available state in 15 minutes"
+    echo "   Checking MCE status..."
+    kubectl get mce --all-namespaces -o yaml
   }
 else
   echo "⚠️  install-acm script not found. Please install ACM manually."
