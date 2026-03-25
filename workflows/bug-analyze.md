@@ -198,13 +198,33 @@ EOF
 - **Auto-draft comment**: Generate missing-info comment from analysis
 - **Human approval loop**: Present analysis and draft comment for user review
 
-## Phase 3: Full Automation (Future)
+## Phase 3: Full Automation (Implemented)
 
+**Skill**: [`sfa-bug-reproduce`](../.claude/skills/sfa-bug-reproduce/SKILL.md) - Full end-to-end bug reproduction workflow
+
+Orchestrates the complete process:
 - **Cluster provisioning**: Spin up ephemeral ACM cluster with specified version (using `install-acm` skill)
-- **Test execution**: Parse steps and execute (or run provided test script)
-- **Result capture**: Logs, screenshots, success/failure status
+- **Test execution**: Run user-provided test script or interactive manual testing
+- **Result capture**: Logs, cluster state, evidence collection
 - **Jira update**: Post reproduction results as comment
 - **Cleanup**: Teardown environment using `uninstall-acm` skill
+
+**Usage**:
+```bash
+# With automated test script
+.claude/skills/sfa-bug-reproduce/reproduce.sh \
+  --issue-key ACM-30940 \
+  --test-script ./test-acm-30940.sh
+
+# Manual testing mode
+.claude/skills/sfa-bug-reproduce/reproduce.sh \
+  --issue-key ACM-31402
+
+# Skip cleanup for inspection
+.claude/skills/sfa-bug-reproduce/reproduce.sh \
+  --issue-key ACM-30940 \
+  --auto-cleanup false
+```
 
 ---
 
@@ -276,12 +296,15 @@ Description: [detailed steps for app deployment issue]
 
 ---
 
-## Automation Hooks (Future)
+## Automation Hooks
 
 ```bash
-# Phase 2: Auto-analyze on demand
-.claude/skills/sfa-bug-analyze/analyze.sh ACM-12345
+# Phase 2: Auto-analyze bug (implemented)
+.claude/skills/sfa-bug-analyze/SKILL.md  # See skill documentation
 
-# Phase 3: Auto-reproduce (with approval)
-.claude/skills/sfa-bug-reproduce/reproduce.sh ACM-12345 --version "ACM 2.14.0"
+# Phase 3: Full automated reproduction (implemented)
+.claude/skills/sfa-bug-reproduce/reproduce.sh \
+  --issue-key ACM-12345 \
+  --acm-version "MCE 2.17.0" \
+  --test-script ./my-test.sh
 ```
