@@ -135,7 +135,13 @@ fi
 echo "  Installing ACM... (this may take 10-15 minutes)"
 
 if [[ -f ".claude/skills/install-acm/scripts/install-acm.sh" ]]; then
-  INSTALL_FLAGS="--version $ACM_VERSION --wait"
+  INSTALL_FLAGS="--type downstream --version $ACM_VERSION --latest --wait"
+
+  # Use pull-secret if available
+  if [[ -f ".output/pull-secret.json" ]]; then
+    INSTALL_FLAGS="$INSTALL_FLAGS --pull-secret .output/pull-secret.json"
+  fi
+
   if [[ "$AUTO_CONFIRM" == "true" ]]; then
     INSTALL_FLAGS="$INSTALL_FLAGS --yes"
   fi
