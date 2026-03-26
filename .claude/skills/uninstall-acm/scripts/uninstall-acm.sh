@@ -34,7 +34,7 @@ parse_args() {
             --kubeconfig)         KUBECONFIG_PATH="$2"; shift 2 ;;
             --skip-cluster-check) SKIP_CLUSTER_CHECK=true; shift ;;
             --deprovision-all)    DEPROVISION_ALL=true; shift ;;
-            --force)              FORCE=true; shift ;;
+            --force|--yes|-y)     FORCE=true; shift ;;
             -h|--help)            usage; exit 0 ;;
             *)                    error "Unknown option: $1"; usage; exit 1 ;;
         esac
@@ -51,12 +51,13 @@ Options:
   --kubeconfig PATH       Path to kubeconfig file
   --skip-cluster-check    Skip managed cluster check
   --deprovision-all       Deprovision all Hive clusters without prompting
-  --force                 Skip all confirmation prompts
+  --force, --yes, -y      Skip all confirmation prompts (for automation)
   -h, --help              Show this help message
 
 Examples:
   $(basename "$0")
   $(basename "$0") --force
+  $(basename "$0") --yes
   $(basename "$0") --deprovision-all
 EOF
 }
