@@ -152,14 +152,7 @@ if [[ -f ".claude/skills/install-acm/scripts/install-acm.sh" ]]; then
     exit 1
   }
 
-  # Wait for MCE to be ready
-  echo ""
-  echo "  Waiting for MCE to be ready..."
-  kubectl wait --for=condition=Available mce --all --timeout=15m || {
-    echo "⚠️  MCE did not reach Available state in 15 minutes"
-    echo "   Checking MCE status..."
-    kubectl get mce --all-namespaces -o yaml
-  }
+  # install-acm now waits for MCE/MCH CR to be ready
 else
   echo "⚠️  install-acm script not found. Please install ACM manually."
   echo "   Press Enter when ACM is ready..."

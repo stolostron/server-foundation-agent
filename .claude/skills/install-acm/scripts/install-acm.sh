@@ -1018,32 +1018,67 @@ main() {
     # Step 9: Wait for CSV
     wait_for_csv "$namespace" "$csv_prefix"
 
+    # Step 10: Create MCH/MCE CR and wait for it to be ready
+    echo ""
+    if [[ "$PRODUCT" == "acm" ]]; then
+        info "Creating MultiClusterHub CR..."
+        cat <<EOF | oc apply -f -
+apiVersion: operator.open-cluster-management.io/v1
+kind: MultiClusterHub
+metadata:
+  name: multiclusterhub
+  namespace: open-cluster-management
+spec: {}
+EOF
+        ok "MultiClusterHub CR created"
+
+        info "Waiting for MultiClusterHub to be ready..."
+        local retries=0
+        while [[ $retries -lt 60 ]]; do
+            local phase
+            phase=$(oc get mch multiclusterhub -n open-cluster-management -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+            if [[ "$phase" == "Running" ]]; then
+                ok "MultiClusterHub is ready"
+                break
+            fi
+            sleep 10
+            retries=$((retries + 1))
+            if [[ $((retries % 6)) -eq 0 ]]; then
+                info "MCH phase: $phase (waiting...)"
+            fi
+        done
+    else
+        info "Creating MultiClusterEngine CR..."
+        cat <<EOF | oc apply -f -
+apiVersion: multicluster.openshift.io/v1
+kind: MultiClusterEngine
+metadata:
+  name: multiclusterengine
+spec: {}
+EOF
+        ok "MultiClusterEngine CR created"
+
+        info "Waiting for MultiClusterEngine to be ready..."
+        local retries=0
+        while [[ $retries -lt 60 ]]; do
+            local phase
+            phase=$(oc get mce multiclusterengine -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+            if [[ "$phase" == "Available" ]]; then
+                ok "MultiClusterEngine is ready"
+                break
+            fi
+            sleep 10
+            retries=$((retries + 1))
+            if [[ $((retries % 6)) -eq 0 ]]; then
+                info "MCE phase: $phase (waiting...)"
+            fi
+        done
+    fi
+
     echo ""
     echo "============================================"
     ok "$(echo "$PRODUCT" | tr '[:lower:]' '[:upper:]') $VERSION installation complete!"
     echo "============================================"
-    echo ""
-    echo "Next steps:"
-    if [[ "$PRODUCT" == "acm" ]]; then
-        echo "  Create a MultiClusterHub CR to complete ACM setup:"
-        echo "  oc create -f - <<EOF"
-        echo "  apiVersion: operator.open-cluster-management.io/v1"
-        echo "  kind: MultiClusterHub"
-        echo "  metadata:"
-        echo "    name: multiclusterhub"
-        echo "    namespace: open-cluster-management"
-        echo "  spec: {}"
-        echo "  EOF"
-    else
-        echo "  Create a MultiClusterEngine CR to complete MCE setup:"
-        echo "  oc create -f - <<EOF"
-        echo "  apiVersion: multicluster.openshift.io/v1"
-        echo "  kind: MultiClusterEngine"
-        echo "  metadata:"
-        echo "    name: multiclusterengine"
-        echo "  spec: {}"
-        echo "  EOF"
-    fi
 }
 
 main "$@"
