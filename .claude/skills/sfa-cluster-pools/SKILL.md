@@ -198,6 +198,8 @@ kind: ClusterClaim
 metadata:
   name: <username>-sno  # e.g., zhujian7-sno, xuezhaojun-dev
   namespace: server-foundation
+  annotations:
+    cluster.open-cluster-management.io/createmanagedcluster: "false"  # Prevent auto-import
 spec:
   clusterPoolName: server-foundation-sno-lite  # Use SNO pool, NOT server-foundation-ha
 EOF
@@ -221,6 +223,10 @@ The claim will:
 2. Wake it up (set powerState to Running)
 3. Assign it to your claim name
 4. The pool will automatically provision a new cluster to maintain pool size
+
+#### Auto-Import Prevention
+
+The annotation `cluster.open-cluster-management.io/createmanagedcluster: "false"` is included in the claim YAML above by default. This prevents the claimed cluster from being auto-imported as a ManagedCluster on the collective cluster. **Always include this annotation** when claiming clusters unless you explicitly need the cluster to be managed by the collective.
 
 ### 5. List Claimed Clusters
 
