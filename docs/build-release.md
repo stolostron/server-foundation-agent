@@ -10,6 +10,7 @@ Load these on-demand based on the task:
 |-----------|------|-------------|
 | [Branch Tables](build-release/branch-tables.md) | `docs/build-release/branch-tables.md` | Looking up active branches, maintenance ranges, fast-forward targets |
 | [MCE vs ACM Builds](build-release/mce-vs-acm-builds.md) | `docs/build-release/mce-vs-acm-builds.md` | Tekton, Dockerfile, publish job differences between MCE and ACM |
+| [Verifying Release Contents](build-release/verifying-release-contents.md) | `docs/build-release/verifying-release-contents.md` | Checking if a specific commit/CVE fix shipped in an MCE/ACM release |
 
 ## Version Unification (2.17+)
 
