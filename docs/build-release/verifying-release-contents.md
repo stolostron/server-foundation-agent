@@ -23,52 +23,46 @@ MCE and ACM releases ship in specific OCP operator catalogs:
 
 ### 1. Extract the Operator Catalog Bundle
 
-For newer OCP versions (4.20+) that fail direct `podman run` with signature errors, use `skopeo` to copy first:
+Use `opm render` to extract bundle information in YAML format:
 
 ```bash
-# Method 1: Direct podman run (works for 4.18, 4.19)
-podman run --rm --entrypoint cat \
+# Extract both MCE and ACM bundles from OCP 4.18 catalog in one command
+podman run --rm --entrypoint opm \
   registry.redhat.io/redhat/redhat-operator-index:v4.18 \
-  /configs/multicluster-engine/bundles.json > /tmp/4.18.bundle.json
+  render /configs/multicluster-engine/ /configs/advanced-cluster-management/ \
+  -o=yaml > /tmp/mce-acm-4.18.yaml
 
-# Method 2: skopeo copy + podman load (required for 4.20+)
-skopeo copy --override-os linux --override-arch amd64 \
-  docker://registry.redhat.io/redhat/redhat-operator-index:v4.20 \
-  docker-archive:/tmp/4.20-index.tar
-
-podman load -i /tmp/4.20-index.tar
-# Note the sha256 from output, then:
-podman run --rm --entrypoint cat \
-  sha256:<IMAGE_SHA> \
-  /configs/multicluster-engine/bundles.json > /tmp/4.20.bundle.json
+# Or extract individually:
+podman run --rm --entrypoint opm \
+  registry.redhat.io/redhat/redhat-operator-index:v4.18 \
+  render /configs/multicluster-engine/ -o=yaml > /tmp/mce-4.18.yaml
 ```
 
-**For ACM bundles**, replace `/configs/multicluster-engine/bundles.json` with `/configs/advanced-cluster-management/bundles.json`.
+This method works for all OCP versions without signature verification issues.
 
 ### 2. List Available Release Versions
 
 ```bash
-# List all MCE versions in catalog
-grep '"multicluster-engine.v' /tmp/4.18.bundle.json | \
-  jq -r '.name' | sort -V -u
+# List all MCE bundle versions in catalog
+yq eval 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | sort -V -u
 
-# List only MCE 2.8.x versions
-grep '"multicluster-engine.v' /tmp/4.18.bundle.json | \
-  jq -r '.name' | grep '^multicluster-engine.v2\.8' | sort -V
+# List only MCE 2.8.x bundles
+yq eval 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | \
+  grep '^multicluster-engine.v2\.8' | sort -V
 ```
 
 ### 3. Extract Component Image for Specific Release
 
 ```bash
 # Get managedcluster-import-controller image for MCE 2.8.5
-jq -c 'select(.name == "multicluster-engine.v2.8.5") | \
+yq eval 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
   .relatedImages[] | \
   select(.name == "managedcluster_import_controller")' \
-  /tmp/4.18.bundle.json
+  /tmp/mce-4.18.yaml
 
 # Output:
-# {"name":"managedcluster_import_controller",
-#  "image":"registry.redhat.io/multicluster-engine/managedcluster-import-controller-rhel9@sha256:33f154b..."}
+# image: registry.redhat.io/multicluster-engine/managedcluster-import-controller-rhel9@sha256:33f154b...
+# name: managedcluster_import_controller
 ```
 
 **Finding component names:** Component names in `relatedImages` use underscores, not hyphens (e.g., `managedcluster_import_controller`, not `managedcluster-import-controller`). Common components:
@@ -118,10 +112,10 @@ Batch check all versions of a release stream:
 ```bash
 for version in 2.8.0 2.8.1 2.8.2 2.8.3 2.8.4 2.8.5; do
   echo "MCE $version:"
-  jq -c "select(.name == \"multicluster-engine.v$version\") | \
+  yq eval "select(.schema == \"olm.bundle\" and .name == \"multicluster-engine.v$version\") | \
     .relatedImages[] | \
     select(.name == \"managedcluster_import_controller\")" \
-    /tmp/4.18.bundle.json
+    /tmp/mce-4.18.yaml
   echo
 done
 ```
@@ -151,12 +145,6 @@ Same process as CVE verification, but look for the feature's merge commit instea
 
 ## Troubleshooting
 
-### Signature Error on Newer Catalogs
-
-**Error:** `Source image rejected: A signature was required, but no signature exists`
-
-**Solution:** Use `skopeo copy` + `podman load` instead of direct `podman run` (see Method 2 above).
-
 ### Component Image Not Found
 
 **Issue:** Component name doesn't match expected format
@@ -164,8 +152,8 @@ Same process as CVE verification, but look for the feature's merge commit instea
 **Solution:** List all components in a bundle to find correct name:
 
 ```bash
-jq -c 'select(.name == "multicluster-engine.v2.8.5") | \
-  .relatedImages[].name' /tmp/4.18.bundle.json | sort -u
+yq eval 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
+  .relatedImages[].name' /tmp/mce-4.18.yaml | sort -u
 ```
 
 ### Git Commit Not in Local Repo
