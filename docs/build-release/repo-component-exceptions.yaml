@@ -1,0 +1,53 @@
+# Repo → MCE/ACM Component Name Exceptions
+#
+# Default mapping: repo-name → repo_name (hyphen to underscore conversion)
+# Only list exceptions to this rule here.
+
+# Single repos that build multiple components
+multi_component_repos:
+  ocm:
+    components:
+      - registration
+      - work
+      - placement
+    product: mce
+    notes: "OCM core builds multiple foundation components"
+
+# Deprecated components (version-specific availability)
+deprecated:
+  cluster-proxy-addon:
+    component_name: cluster_proxy_addon
+    product: mce
+    available_until: "2.10"
+    reason: "Merged into cluster-proxy in MCE 2.11+"
+    replacement: "cluster-proxy"
+
+# Components with non-standard naming (if any exceptions arise)
+naming_exceptions: {}
+  # Example format:
+  # repo-name:
+  #   component_name: different_component_name
+  #   product: mce  # or acm
+  #   notes: "Reason for exception"
+
+# Reverse mapping: Component → Repo
+# Used when Jira pscomponent label contains the component name
+# Format in Jira: pscomponent:multicluster-engine/<component>-rhel9
+component_to_repo:
+  # OCM core components (all from ocm repo)
+  addon_manager: ocm
+  registration: ocm
+  work: ocm
+  placement: ocm
+  registration_operator: ocm
+
+  # Individual SF repos
+  managedcluster_import_controller: managedcluster-import-controller
+  cluster_proxy: cluster-proxy
+  cluster_proxy_addon: cluster-proxy-addon
+  clusterlifecycle_state_metrics: clusterlifecycle-state-metrics
+  managed_serviceaccount: managed-serviceaccount
+  multicloud_operators_foundation: multicloud-operators-foundation
+  klusterlet_addon_controller: klusterlet-addon-controller
+  cluster_permission: cluster-permission
+  multicluster_role_assignment: multicluster-role-assignment

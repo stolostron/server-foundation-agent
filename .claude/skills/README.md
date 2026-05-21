@@ -25,6 +25,8 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-solution-add](sfa-solution-add/SKILL.md) | Add a new solution (错题本 entry) with credential scanning and grep-friendly format | On demand |
 | [sfa-bug-analyze](sfa-bug-analyze/SKILL.md) | Analyze Jira bug for SF relevance and reproducibility scoring | On demand |
 | [sfa-bug-reproduce](sfa-bug-reproduce/SKILL.md) | Orchestrate full bug reproduction: provision cluster, test, post results | On demand |
+| [sfa-jira-to-repo](sfa-jira-to-repo/SKILL.md) | Map Jira issue to GitHub repository via component/links/Konflux | On demand |
+| [sfa-find-commit-release](sfa-find-commit-release/SKILL.md) | Find which MCE/ACM release contains a commit (CVE verification, feature tracking) | On demand |
 
 ## Adding a New Skill
 
