@@ -193,10 +193,31 @@ repo_to_component() {
   echo "${repo_name//-/_}"
 }
 
+# Convert component name to repo name (reverse mapping)
+# Args:
+#   $1: Component name (e.g., "addon_manager", "managedcluster_import_controller")
+# Returns: Repository name on stdout (one per line if multiple repos build this component)
+component_to_repo() {
+  local component_name="$1"
+  local exceptions_file="${EXCEPTIONS_FILE:-docs/build-release/repo-component-exceptions.yaml}"
+
+  # Check reverse mapping
+  local repo
+  repo=$(yq ".component_to_repo.\"${component_name}\"" "${exceptions_file}" 2>/dev/null || true)
+
+  if [[ -n "${repo}" && "${repo}" != "null" ]]; then
+    echo "${repo}"
+    return 0
+  fi
+
+  # Default: replace underscores with hyphens (reverse of repo_to_component)
+  echo "${component_name//_/-}"
+}
+
 # Main CLI (when script is executed directly, not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   case "${1:-}" in
-    get_catalog_bundle|get_component_image|get_image_commit|find_first_release_with_commit|repo_to_component)
+    get_catalog_bundle|get_component_image|get_image_commit|find_first_release_with_commit|repo_to_component|component_to_repo)
       "$@"
       ;;
     *)
@@ -209,11 +230,13 @@ Available functions:
   get_image_commit <image_url>
   find_first_release_with_commit <catalog_file> <product> <component> <fix_commit> <repo_path> [version_pattern]
   repo_to_component <repo_name>
+  component_to_repo <component_name>
 
 Example:
   $0 get_catalog_bundle 4.18 /tmp/catalog.yaml
   $0 get_component_image /tmp/catalog.yaml mce 2.8.5 managedcluster_import_controller
   $0 repo_to_component managedcluster-import-controller
+  $0 component_to_repo addon_manager
 EOF
       exit 1
       ;;
