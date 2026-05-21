@@ -44,10 +44,10 @@ This method works for all OCP versions without signature verification issues.
 
 ```bash
 # List all MCE bundle versions in catalog
-yq eval 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | sort -V -u
+yq 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | sort -V -u
 
 # List only MCE 2.8.x bundles
-yq eval 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | \
+yq 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | \
   grep '^multicluster-engine.v2\.8' | sort -V
 ```
 
@@ -55,7 +55,7 @@ yq eval 'select(.schema == "olm.bundle") | .name' /tmp/mce-4.18.yaml | \
 
 ```bash
 # Get managedcluster-import-controller image for MCE 2.8.5
-yq eval 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
+yq 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
   .relatedImages[] | \
   select(.name == "managedcluster_import_controller")' \
   /tmp/mce-4.18.yaml
@@ -78,7 +78,7 @@ yq eval 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5
 
 ```bash
 # Extract git commit from image labels
-skopeo inspect --override-os linux --override-arch amd64 \
+skopeo inspect --no-tags --override-os linux --override-arch amd64 \
   docker://registry.redhat.io/multicluster-engine/managedcluster-import-controller-rhel9@sha256:33f154b425f4f146187493dde01c320428ad09881cf6f90cfcdc4bfa2a4e89e6 | \
   jq -r '.Labels["vcs-ref"]'
 
@@ -112,7 +112,7 @@ Batch check all versions of a release stream:
 ```bash
 for version in 2.8.0 2.8.1 2.8.2 2.8.3 2.8.4 2.8.5; do
   echo "MCE $version:"
-  yq eval "select(.schema == \"olm.bundle\" and .name == \"multicluster-engine.v$version\") | \
+  yq "select(.schema == \"olm.bundle\" and .name == \"multicluster-engine.v$version\") | \
     .relatedImages[] | \
     select(.name == \"managedcluster_import_controller\")" \
     /tmp/mce-4.18.yaml
@@ -152,7 +152,7 @@ Same process as CVE verification, but look for the feature's merge commit instea
 **Solution:** List all components in a bundle to find correct name:
 
 ```bash
-yq eval 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
+yq 'select(.schema == "olm.bundle" and .name == "multicluster-engine.v2.8.5") | \
   .relatedImages[].name' /tmp/mce-4.18.yaml | sort -u
 ```
 
