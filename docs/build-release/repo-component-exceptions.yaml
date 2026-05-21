@@ -1,0 +1,31 @@
+# Repo → MCE/ACM Component Name Exceptions
+#
+# Default mapping: repo-name → repo_name (hyphen to underscore conversion)
+# Only list exceptions to this rule here.
+
+# Single repos that build multiple components
+multi_component_repos:
+  ocm:
+    components:
+      - registration
+      - work
+      - placement
+    product: mce
+    notes: "OCM core builds multiple foundation components"
+
+# Deprecated components (version-specific availability)
+deprecated:
+  cluster-proxy-addon:
+    component_name: cluster_proxy_addon
+    product: mce
+    available_until: "2.10"
+    reason: "Merged into cluster-proxy in MCE 2.11+"
+    replacement: "cluster-proxy"
+
+# Components with non-standard naming (if any exceptions arise)
+naming_exceptions: {}
+  # Example format:
+  # repo-name:
+  #   component_name: different_component_name
+  #   product: mce  # or acm
+  #   notes: "Reason for exception"
