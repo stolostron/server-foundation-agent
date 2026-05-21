@@ -162,7 +162,33 @@ Cross-check the result against `docs/repos.md`:
 - Report findings and ask user
 - Suggest checking issue comments or related issues
 
-## Example Execution
+## Example Executions
+
+### Example 1: CVE with pscomponent label
+
+```
+Input: ACM-31641
+
+Step 1: Fetch issue
+  Component: Security, Server Foundation
+  Labels: pscomponent:multicluster-engine/addon-manager-rhel9
+  Description: "Security Tracking Issue... gRPC-Go authorization bypass..."
+  
+Step 2: pscomponent label check
+  Found label: pscomponent:multicluster-engine/addon-manager-rhel9
+  Extracted component: addon_manager
+  Mapped to repo: ocm
+  
+Step 7: Validate
+  Found in docs/repos.md: ✓ SF-owned repo (ocm)
+  
+Output:
+  Repository: stolostron/ocm
+  Source: pscomponent label
+  Confidence: high
+```
+
+### Example 2: CVE with GitHub link in description
 
 ```
 Input: ACM-34139

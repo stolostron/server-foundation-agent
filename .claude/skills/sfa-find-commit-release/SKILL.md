@@ -180,28 +180,46 @@ done
 
 ### From Jira Issue (Full Workflow)
 
-Starting from a Jira CVE issue:
+Starting from a Jira CVE issue, combining both skills:
 
 ```bash
+# Example: ACM-31641 (CVE-2026-33186)
+
 # Step 1: Get repo from Jira (use sfa-jira-to-repo skill)
-# Returns: stolostron/managedcluster-import-controller
+# Input: ACM-31641
+# Label: pscomponent:multicluster-engine/addon-manager-rhel9
+# Output: stolostron/ocm
 
 # Step 2: Get commit from Jira
-# Extract from Git Pull Request field or description
+# Check comments for PR link: https://github.com/stolostron/ocm/pull/675
+# Get merge commit from PR:
+commit=$(gh pr view 675 --repo stolostron/ocm --json mergeCommit --jq '.mergeCommit.oid')
+# Result: 1ba9da8e9ff0c6ad9e60fba282da7f2a1902c698
 
-# Step 3: Map repo to component
-component=$(repo_to_component "managedcluster-import-controller")
+# Step 3: Map repo to component(s)
+# ocm builds multiple components - use repo_to_component
+source .claude/skills/sfa-find-commit-release/mce-verify.sh
+components=$(repo_to_component "ocm")
+# Returns: registration, work, placement
 
-# Step 4: Fetch catalog
-get_catalog_bundle "4.18" "/tmp/catalog.yaml"
+# Step 4: Fetch catalog for target MCE version
+# From Jira fix_versions: MCE 2.10.3
+# MCE 2.10.x is in OCP 4.20 catalog
+get_catalog_bundle "4.20" "/tmp/mce-acm-4.20.yaml"
 
-# Step 5: Find release
+# Step 5: Find first release with commit
+# Check one component (all share same image base)
 first_version=$(find_first_release_with_commit \
-  "/tmp/catalog.yaml" "mce" "${component}" "${commit}" \
-  "repos/server-foundation/stolostron/managedcluster-import-controller" "")
+  "/tmp/mce-acm-4.20.yaml" "mce" "registration" "${commit}" \
+  "repos/server-foundation/stolostron/ocm" "2.10")
 
 # Step 6: Report
-echo "ACM-XXXXX fix shipped in MCE ${first_version}"
+if [[ -n "${first_version}" ]]; then
+  echo "✓ ACM-31641 fix shipped in MCE ${first_version}"
+else
+  echo "✗ Fix not yet in any MCE 2.10.x release"
+  echo "Jira indicates it will ship in MCE 2.10.3 (pending)"
+fi
 ```
 
 ## Edge Cases
