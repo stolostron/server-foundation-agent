@@ -2,14 +2,13 @@
 # Sync all repos defined in repos.yaml as shallow clones under repos/.
 #
 # Usage:
-#   ./repos/sync-repos.sh          # clone any missing repos
+#   ./repos/sync-repos.sh [--init] # clone any missing repos
 #   ./repos/sync-repos.sh --update # pull latest for all repos
 #   ./repos/sync-repos.sh --status # show status of all repos
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOS_YAML="$SCRIPT_DIR/repos.yaml"
 REPOS_DIR="$SCRIPT_DIR"
 
@@ -18,10 +17,11 @@ if ! command -v yq &>/dev/null; then
   exit 1
 fi
 
-ACTION="${1:-init}"
+ACTION="${1:-"--init"}"
 
 # Parse repos.yaml and yield lines: category org/repo [branch]
 parse_repos() {
+  # shellcheck disable=SC2016
   yq eval '
     .repos | to_entries[] | .key as $category |
     .value | to_entries[] | .key as $org_key |
@@ -57,11 +57,7 @@ clone_or_update() {
   else
     echo "Cloning $category/$org_dir/$repo ..."
     mkdir -p "$(dirname "$clone_dir")"
-    local branch_args=()
-    if [[ -n "$branch" ]]; then
-      branch_args=(--branch "$branch")
-    fi
-    git clone --depth 1 "${branch_args[@]}" "https://github.com/$full_repo.git" "$clone_dir" 2>&1 | sed 's/^/  /'
+    git clone --depth 1 ${branch:+--branch "$branch"} "https://github.com/$full_repo.git" "$clone_dir" 2>&1 | sed 's/^/  /'
   fi
 }
 
@@ -99,7 +95,7 @@ case "$ACTION" in
     echo "Done."
     show_status
     ;;
-  *)
+  --init)
     echo "Cloning missing repos (shallow, depth 1)..."
     parse_repos | while read -r category full_repo branch; do
       clone_or_update "$category" "$full_repo" "$branch"
@@ -107,5 +103,9 @@ case "$ACTION" in
     echo ""
     echo "Done."
     show_status
+    ;;
+  *)
+    echo "Usage: $0 [--init|--update|--status]"
+    exit 1
     ;;
 esac
