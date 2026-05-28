@@ -36,7 +36,7 @@ If auth fails (missing env vars or invalid token), stop and report clearly.
 
 ## Skills
 
-Four CRUD skills and three scenario skills for Jira operations:
+### CRUD and action items
 
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
@@ -44,13 +44,33 @@ Four CRUD skills and three scenario skills for Jira operations:
 | [sfa-jira-create](../.claude/skills/sfa-jira-create/SKILL.md) | Create issues with SF defaults | "create a jira bug" |
 | [sfa-jira-update](../.claude/skills/sfa-jira-update/SKILL.md) | Status transitions and field updates | "move ACM-12345 to review" |
 | [sfa-jira-comment](../.claude/skills/sfa-jira-comment/SKILL.md) | Add comments (PR links, progress notes) | "post PR to ACM-12345" |
-| [sfa-jira-standup](../.claude/skills/sfa-jira-standup/SKILL.md) | Daily standup report | "standup", "daily update" |
-| [sfa-jira-triage](../.claude/skills/sfa-jira-triage/SKILL.md) | Bug triage report | "triage bugs", "new bugs" |
-| [sfa-jira-sprint-report](../.claude/skills/sfa-jira-sprint-report/SKILL.md) | Sprint health report | "sprint status", "sprint report" |
+| [sfa-jira-inbox](../.claude/skills/sfa-jira-inbox/SKILL.md) | Inbox and action items (assigned, reported, mentioned) | "jira inbox", "what needs my attention" |
+
+### Reports and triage
+
+| Skill | Purpose | Trigger |
+|-------|---------|---------|
+| [sfa-jira-standup](../.claude/skills/sfa-jira-standup/SKILL.md) | Daily standup report (per assignee) | "standup", "daily update" |
+| [sfa-jira-triage](../.claude/skills/sfa-jira-triage/SKILL.md) | Bug triage summary by severity (lightweight list) | "bug triage summary", "unassigned bugs" |
+| [sfa-jira-sprint-report](../.claude/skills/sfa-jira-sprint-report/SKILL.md) | Sprint health report (quick team overview) | "sprint status", "sprint report" |
+
+For automated daily team coaching (burndown, cycle time, Slack), use the [daily-scrum-prep](../workflows/daily-scrum-prep.md) workflow instead of `sfa-jira-sprint-report`.
+
+### Bug and security analysis
+
+| Skill | Purpose | Trigger |
+|-------|---------|---------|
+| [sfa-bug-analyze](../.claude/skills/sfa-bug-analyze/SKILL.md) | SF relevance and reproducibility scoring for one bug | "analyze bug ACM-12345", "check reproducibility" |
+| [sfa-bug-reproduce](../.claude/skills/sfa-bug-reproduce/SKILL.md) | End-to-end reproduction (cluster, test, Jira update) | "reproduce bug ACM-12345" |
+| [sfa-cve-analysis](../.claude/skills/sfa-cve-analysis/SKILL.md) | CVE grouping, tracking tasks, branch impact analysis | CVE monitoring, security triage |
+
+For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-triage](../workflows/daily-bug-triage.md) instead of `sfa-jira-triage`.
+
+CVE dependency upgrade procedures: see [older-branch-dep-upgrade](../solutions/older-branch-dep-upgrade.md) in `solutions/`.
 
 ## Lifecycle Integration
 
-```
+```text
 1. Create issue         →  sfa-jira-create
 2. Start development    →  sfa-jira-update --status "In Progress"
 3. Create PR            →  sfa-jira-comment --pr-url <URL>
