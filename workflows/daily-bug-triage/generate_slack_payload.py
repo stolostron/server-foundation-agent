@@ -12,10 +12,10 @@ import json
 import glob
 import os
 import sys
-import datetime
+from pathlib import Path
 
-# Slack user group mention for Server Foundation team
-SF_GROUP_MENTION = "<!subteam^S04N59L7UPR|acm-server-foundation>"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from slack_blocks import SF_GROUP_MENTION, agent_footer_block, escape_mrkdwn, today_iso, truncate
 
 # Priority emoji mapping
 PRIORITY_EMOJI = {
@@ -25,11 +25,6 @@ PRIORITY_EMOJI = {
     "Normal": "\U0001f535",    # blue circle
     "Minor": "\u26aa",         # white circle
 }
-
-
-def escape_mrkdwn(text):
-    """Escape Slack mrkdwn special characters."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def load_analyses(analyses_dir):
@@ -45,9 +40,7 @@ def load_analyses(analyses_dir):
 def format_root_cause_bug(a):
     """Format a bug with root cause found."""
     priority_em = PRIORITY_EMOJI.get(a['priority'], '')
-    summary = escape_mrkdwn(a['summary'])
-    if len(summary) > 60:
-        summary = summary[:59] + "\u2026"
+    summary = truncate(escape_mrkdwn(a['summary']), 60)
     short_repo = a.get('relevant_repo', '').split('/')[-1] if a.get('relevant_repo') else 'unknown'
 
     lines = [f"\u2022 <{a['url']}|{a['key']}> {priority_em} *{a['priority']}* \u2014 {summary}"]
@@ -58,9 +51,7 @@ def format_root_cause_bug(a):
     lines.append(f"     _Repo:_ {short_repo} \u00b7 _Files:_ {files_str}")
 
     # One-line summary (full details in Jira comment)
-    root_cause = escape_mrkdwn(a.get('root_cause', ''))
-    if len(root_cause) > 120:
-        root_cause = root_cause[:119] + "\u2026"
+    root_cause = truncate(escape_mrkdwn(a.get('root_cause', '')), 120)
     lines.append(f"     {root_cause}")
     lines.append(f"     \U0001f4ac <{a['url']}|Full analysis in Jira comment>")
 
@@ -76,17 +67,13 @@ def format_root_cause_bug(a):
 def format_partial_bug(a):
     """Format a bug with partial analysis."""
     priority_em = PRIORITY_EMOJI.get(a['priority'], '')
-    summary = escape_mrkdwn(a['summary'])
-    if len(summary) > 60:
-        summary = summary[:59] + "\u2026"
+    summary = truncate(escape_mrkdwn(a['summary']), 60)
     short_repo = a.get('relevant_repo', '').split('/')[-1] if a.get('relevant_repo') else 'unknown'
 
     lines = [f"\u2022 <{a['url']}|{a['key']}> {priority_em} *{a['priority']}* \u2014 {summary}"]
     lines.append(f"     _Repo:_ {short_repo}")
 
-    notes = escape_mrkdwn(a.get('notes', a.get('root_cause', '')))
-    if len(notes) > 200:
-        notes = notes[:199] + "\u2026"
+    notes = truncate(escape_mrkdwn(a.get('notes', a.get('root_cause', ''))), 200)
     if notes:
         lines.append(f"     _Notes:_ {notes}")
 
@@ -96,15 +83,11 @@ def format_partial_bug(a):
 def format_insufficient_bug(a):
     """Format a bug with insufficient info."""
     priority_em = PRIORITY_EMOJI.get(a['priority'], '')
-    summary = escape_mrkdwn(a['summary'])
-    if len(summary) > 60:
-        summary = summary[:59] + "\u2026"
+    summary = truncate(escape_mrkdwn(a['summary']), 60)
 
     lines = [f"\u2022 <{a['url']}|{a['key']}> {priority_em} *{a['priority']}* \u2014 {summary}"]
 
-    reason = escape_mrkdwn(a.get('notes', 'Insufficient information for analysis'))
-    if len(reason) > 200:
-        reason = reason[:199] + "\u2026"
+    reason = truncate(escape_mrkdwn(a.get('notes', 'Insufficient information for analysis')), 200)
     lines.append(f"     _Reason:_ {reason}")
 
     return "\n".join(lines)
@@ -113,9 +96,7 @@ def format_insufficient_bug(a):
 def format_previously_analyzed_bug(bug):
     """Format a bug that was already analyzed in a prior triage run."""
     priority_em = PRIORITY_EMOJI.get(bug.get('priority', ''), '')
-    summary = escape_mrkdwn(bug.get('summary', ''))
-    if len(summary) > 60:
-        summary = summary[:59] + "\u2026"
+    summary = truncate(escape_mrkdwn(bug.get('summary', '')), 60)
     url = bug.get('url', '')
     key = bug.get('key', '')
     assignee = bug.get('assignee', 'Unassigned')
@@ -146,7 +127,7 @@ def main():
                     previously_analyzed = json.load(f)
 
     analyses = load_analyses(analyses_dir)
-    today = datetime.date.today().isoformat()
+    today = today_iso()
     total = len(analyses)
 
     # Group by analysis_status
@@ -231,9 +212,7 @@ def main():
     if error_bugs:
         text = f"*\u26a0\ufe0f Analysis Error ({n_error})*\n"
         for a in error_bugs:
-            summary = escape_mrkdwn(a['summary'])
-            if len(summary) > 60:
-                summary = summary[:59] + "\u2026"
+            summary = truncate(escape_mrkdwn(a['summary']), 60)
             notes = escape_mrkdwn(a.get('notes', 'Unknown error'))
             text += f"\u2022 <{a['url']}|{a['key']}> \u2014 {summary}\n     _Error:_ {notes}\n"
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
@@ -257,15 +236,7 @@ def main():
         })
 
     # --- Context footer ---
-    blocks.append({
-        "type": "context",
-        "elements": [
-            {
-                "type": "mrkdwn",
-                "text": f"Generated by server-foundation-agent \u00b7 {today}"
-            }
-        ]
-    })
+    blocks.append(agent_footer_block(today))
 
     payload = {"text": fallback_text, "blocks": blocks}
 
