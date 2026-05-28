@@ -51,7 +51,7 @@ if [[ -z "$ISSUE_KEY" ]]; then
 fi
 
 echo "═══════════════════════════════════════════════════════"
-echo " Bug Reproduction Workflow (Phase 3)"
+echo " Bug Reproduction Workflow"
 echo "═══════════════════════════════════════════════════════"
 echo "Issue: $ISSUE_KEY"
 echo "═══════════════════════════════════════════════════════"

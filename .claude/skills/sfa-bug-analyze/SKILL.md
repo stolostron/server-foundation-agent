@@ -6,11 +6,12 @@ description: "Analyze a Jira bug for Server Foundation relevance and reproducibi
 # Bug Reproducibility Analysis
 
 Analyze a Jira bug to determine:
+
 1. Whether it's relevant to the Server Foundation team
 2. If there's sufficient information to reproduce it
 3. What information is missing (if any)
 
-This is Phase 2 automation of the [analyze-bug-reproducibility solution](../../../solutions/analyze-bug-reproducibility.md).
+For full end-to-end reproduction, use [sfa-bug-reproduce](../sfa-bug-reproduce/SKILL.md), which starts with this `sfa-bug-analyze` skill.
 
 ## Parameters
 
@@ -371,7 +372,7 @@ Check if ACM-12345 is SF-related and reproducible
 - **Authentication**: Uses `$JIRA_EMAIL` and `$JIRA_API_TOKEN`
 - **Browse URL**: `https://redhat.atlassian.net/browse/<ISSUE-KEY>`
 
-## Future Enhancements (Phase 3)
+## Future Enhancements
 
 - Automated cluster provisioning with specified ACM/MCE version (using `install-acm` skill)
 - Test execution based on parsed steps

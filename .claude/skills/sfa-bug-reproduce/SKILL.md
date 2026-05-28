@@ -3,11 +3,11 @@ name: sfa-bug-reproduce
 description: "Orchestrate full bug reproduction workflow: analyze bug, provision ACM cluster, execute test, capture results, and post to Jira. Use this skill when the user wants to reproduce a bug end-to-end, set up a test environment for a bug, or says 'reproduce bug ACM-12345', 'test ACM-12345', 'reproduce this bug automatically'."
 ---
 
-# Bug Reproduction (Phase 3)
+# Bug Reproduction
 
 Orchestrate the complete bug reproduction workflow from analysis to cleanup.
 
-This is the Phase 3 automation of the [analyze-bug-reproducibility solution](../../../solutions/analyze-bug-reproducibility.md).
+Runs [sfa-bug-analyze](../sfa-bug-analyze/SKILL.md) first, then provisions ACM/MCE, executes tests, and posts results. The [bug-analyze workflow](../../../workflows/bug-analyze.md) also redirects to these skills.
 
 ## Parameters
 
