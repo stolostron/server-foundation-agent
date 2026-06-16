@@ -82,7 +82,17 @@ get_sf_repos() {
         log_error "repos.yaml not found at $repos_yaml"
         return 1
     fi
-    yq eval '.repos.server-foundation.stolostron[].repo' "$repos_yaml"
+    if command -v yq &>/dev/null; then
+        yq eval '.repos.server-foundation.stolostron[].repo' "$repos_yaml"
+        return 0
+    fi
+    log_warn "yq not found — parsing repos.yaml with awk fallback"
+    awk '
+      /^  deps:/ { exit }
+      /^    stolostron:/ { in_sf_stolostron=1; next }
+      in_sf_stolostron && /^    [a-z#]/ && !/^    stolostron:/ { in_sf_stolostron=0 }
+      in_sf_stolostron && /- repo: stolostron\// { sub(/.*repo: /, ""); print }
+    ' "$repos_yaml"
 }
 
 # Fetch open PRs from all SF stolostron downstream repos.
@@ -196,8 +206,8 @@ if [ "${BASH_SOURCE[0]}" -ef "$0" ]; then
         exit 1
     fi
 
-    if ! command -v yq &>/dev/null; then
-        log_error "yq is not installed. Please install it first."
+    if ! command -v jq &>/dev/null; then
+        log_error "jq is not installed. Please install it first."
         exit 1
     fi
 

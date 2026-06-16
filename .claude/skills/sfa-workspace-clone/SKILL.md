@@ -93,7 +93,9 @@ git push fork <branch-name>
 gh pr create --repo <org/repo> --head <your-user>:<branch-name>
 
 # SFA Footprint: always add the sfa-assisted label after creating a PR
-gh pr edit <PR-NUMBER> --repo <org/repo> --add-label "sfa-assisted"
+PR_URL=$(gh pr create ...)
+PR_NUM="${PR_URL##*/}"
+bash scripts/ensure-sfa-assisted-label.sh <org/repo> "$PR_NUM"
 ```
 
 ## Input

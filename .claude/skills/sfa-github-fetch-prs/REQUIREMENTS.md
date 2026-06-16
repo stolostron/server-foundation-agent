@@ -11,7 +11,10 @@ gh --version
 # jq (for JSON processing)
 jq --version
 
-# yq (for YAML processing)
+# jq (for JSON processing)
+jq --version
+
+# yq (optional — fetch-prs.sh uses awk fallback when absent)
 yq --version
 
 # Bash 4.0+ (macOS users: brew install bash)

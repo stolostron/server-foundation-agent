@@ -157,34 +157,54 @@ Skip this phase (treat all bugs as new) if:
 
 ## Phase 2: Analyze Each Bug (Sub-Agents)
 
-For each bug, spawn a **sub-agent** to perform a deep-dive analysis against the codebase. This prevents context window exhaustion when analyzing multiple bugs.
+For each bug, spawn a **sub-agent** to perform a deep-dive analysis against the codebase.
+
+### Memory limits (agent-swarm)
+
+Agent pods are memory-constrained. **Do not** run `./repos/sync-repos.sh` in
+agent-swarm — it requires Go `mikefarah/yq` (not Python `yq`) and shallow-clones
+20+ repos (OOM risk).
+
+Instead:
+
+1. Process bugs **sequentially** (one sub-agent at a time; max 2 parallel only with
+   `PARALLEL_ANALYZE` in `instruction_prompt`)
+2. Cap at **3 bugs analyzed per run**; defer the rest to the next cron
+3. Before each sub-agent, clone **one** primary repo:
+   ```bash
+   bash workflows/daily-bug-triage/clone_repo.sh stolostron/managedcluster-import-controller
+   ```
+
+See `prompts/daily-bug-triage.md` Phase 2 for the agent-swarm prompt.
 
 ### Sub-Agent Architecture
 
 Each sub-agent:
-1. Receives a single bug object (from Phase 1)
+1. Receives a single bug object (from Phase 1) and the cloned repo path
 2. Reads `prompts/daily-bug-triage-analyze.md` (or `workflows/daily-bug-triage/analyze_bug.md`) for its instructions
-3. Identifies the relevant repository based on bug summary, description, and components
-4. Searches `repos/` (read-only clones) for relevant code
-5. Analyzes the root cause based on code and bug description
-6. Writes result to `.output/bug-triage/analyses/bug-<KEY>.json`
+3. Searches the **one** relevant repo under `repos/` (read-only)
+4. Analyzes the root cause based on code and bug description
+5. Writes result to `.output/bug-triage/analyses/bug-<KEY>.json`
 
 ### Spawning Sub-Agents
 
-Use the Agent tool to spawn each sub-agent:
+Use the Agent tool to spawn each sub-agent **sequentially** (wait for completion before the next):
 
 ```
-For each bug in bugs_to_analyze.json (filtered by Phase 1.5):
+For each bug in bugs_to_analyze.json (filtered by Phase 1.5), up to 3 per run:
+  bash workflows/daily-bug-triage/clone_repo.sh <org/repo>   # primary repo only
   Agent(
     subagent_type: "general-purpose",
     description: "Analyze bug <KEY>",
     prompt: "Read prompts/daily-bug-triage-analyze.md for instructions.
              Here is the bug data: <BUG_JSON>.
+             Cloned repo: repos/server-foundation/...
              Analyze this bug and write the result to .output/bug-triage/analyses/bug-<KEY>.json"
   )
 ```
 
-**Parallelism**: Spawn up to 3-5 sub-agents concurrently. Each operates independently on its own bug.
+**Parallelism**: default **sequential**. At most 2 concurrent sub-agents when
+`PARALLEL_ANALYZE` is set — never 3+ (OOM risk in agent-swarm pods).
 
 ### Analysis Result Schema
 
@@ -483,6 +503,6 @@ The sub-agent maps bugs to repos using these signals (in priority order):
 ## Performance Notes
 
 - Phase 1 makes one Jira API call — very fast
-- Phase 2 sub-agents run in parallel (up to 3-5 concurrent)
-- Sub-agents only read code from `repos/` (local clones) — no git clone needed
-- Total workflow should complete within 10-15 minutes for typical bug counts (1-10 bugs)
+- Phase 2: **sequential** sub-agents (default); on-demand `clone_repo.sh` per bug — not full `sync-repos.sh`
+- Cap **3 bugs per run** in agent-swarm to avoid OOM
+- Total workflow should complete within 10–20 minutes for typical bug counts (1–3 new bugs)

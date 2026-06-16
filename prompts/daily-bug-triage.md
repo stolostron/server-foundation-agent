@@ -42,6 +42,16 @@ Sub-agent instructions: `daily-bug-triage-analyze.md` (same prompt source).
 
 Extended conventions: `prompts/_sfa-conventions.md`
 
+## Memory limits (agent-swarm)
+
+Agent pods are memory-constrained. OOM commonly happens when:
+
+- Running `./repos/sync-repos.sh` (needs **Go** `mikefarah/yq`, not Python `yq`; clones 20+ repos)
+- Spawning **multiple analysis sub-agents in parallel**
+- Cloning many repos at once
+
+**Defaults:** sequential analysis, on-demand clone of **one repo per bug**, max **3** bugs analyzed per run.
+
 ## Workflow
 
 ```
@@ -93,19 +103,36 @@ python3 workflows/daily-bug-triage/check_prior_analysis.py \
 
 (requires `JIRA_EMAIL` and `JIRA_API_TOKEN`)
 
-## Phase 2: Analyze each bug (sub-agents)
+## Phase 2: Analyze each bug (sequential, memory-safe)
 
-If `repos/` clones look empty, run once:
+**Do not** run `./repos/sync-repos.sh` in agent-swarm pods.
 
-```bash
-./repos/sync-repos.sh
-```
+For each bug in `bugs_to_analyze.json`, process **one at a time** (no parallel
+sub-agents unless `instruction_prompt` contains `PARALLEL_ANALYZE` — then max **2**
+concurrent).
 
-For each bug in `bugs_to_analyze.json`, spawn a sub-agent (up to **5** concurrent):
+**Per-run cap:** analyze at most **3** bugs. If more remain, list deferred keys in
+the final summary (they stay in `bugs_to_analyze.json` for the next run).
 
-- Read `daily-bug-triage-analyze.md` for instructions
-- Pass the bug JSON in the prompt
-- Expect output at `.output/bug-triage/analyses/bug-<KEY>.json`
+For each bug (in order):
+
+1. **Pick likely repo(s)** from summary/description (see keyword table in
+   `daily-bug-triage-analyze.md`). Clone **only** the primary repo:
+   ```bash
+   bash workflows/daily-bug-triage/clone_repo.sh stolostron/managedcluster-import-controller
+   ```
+   Use `open-cluster-management-io/...` org when the bug maps to upstream OCM repos.
+   Skip clone if that repo directory already has `.git`.
+
+2. **Spawn one sub-agent** with:
+   - Read `prompts/daily-bug-triage-analyze.md`
+   - Pass the bug JSON and the cloned repo path(s)
+   - Expect output at `.output/bug-triage/analyses/bug-<KEY>.json`
+
+3. **Wait for completion** before starting the next bug.
+
+If a sub-agent fails or times out, write a minimal `bug-<KEY>.json` with
+`analysis_status: error` and continue — do not block later phases.
 
 Do not analyze bugs in `bugs_previously_analyzed.json`.
 
@@ -210,6 +237,7 @@ Report:
 | `SKIP_DEDUP` | Analyze all New bugs (ignore prior comments) |
 | `ENABLE_AUTO_FIX` | Run Phase 2.5 draft PRs for eligible bugs (off by default) |
 | `SKIP_SLACK` | Skip Phase 4 |
+| `PARALLEL_ANALYZE` | Allow up to 2 concurrent analysis sub-agents (default: sequential) |
 
 ## Do not
 
@@ -218,3 +246,5 @@ Report:
 - Modify issues beyond triage comments and the `agent-triaged` label (no status transitions)
 - Run Phase 2.5 auto-fix unless `ENABLE_AUTO_FIX` is set (default is skip)
 - Mark draft PRs ready for review or merge them
+- Run `./repos/sync-repos.sh` or clone more than **2 repos per bug**
+- Spawn more than **2** analysis sub-agents in parallel

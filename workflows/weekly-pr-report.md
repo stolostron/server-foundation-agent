@@ -3,6 +3,11 @@
 Generate a categorized weekly report of all open human PRs on the Server Foundation project board.
 The report helps the team identify merge-ready PRs, stale PRs, conflicts, and bottlenecks.
 
+## Agent-swarm prompt
+
+For [agent-swarm](https://github.com/stolostron/agent-swarm), use
+`prompts/weekly-pr-report.md` instead of this document.
+
 ## Trigger Phrases
 
 - `weekly PR report`, `PR health report`, `PR status report`

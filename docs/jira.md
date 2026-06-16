@@ -21,6 +21,7 @@ Load these on-demand based on the task at hand:
 | [JQL Reference](jira/jql-reference.md) | `docs/jira/jql-reference.md` | Building search queries, JQL syntax and functions |
 | [API Reference](jira/api-reference.md) | `docs/jira/api-reference.md` | REST API endpoints, authentication, curl examples |
 | [Templates](jira/templates.md) | `docs/jira/templates.md` | Issue creation templates (Bug, Epic, Story, Task, Vulnerability) |
+| [Issue grooming (fix agent)](jira-issue-grooming.md) | `docs/jira-issue-grooming.md` | Prepare bugs for agent-swarm `jira-agent-pipeline` |
 
 ## Bootstrap Sequence
 
@@ -65,6 +66,17 @@ For automated daily team coaching (burndown, cycle time, Slack), use the [daily-
 | [sfa-cve-analysis](../.claude/skills/sfa-cve-analysis/SKILL.md) | CVE grouping, tracking tasks, branch impact analysis | CVE monitoring, security triage |
 
 For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-triage](../workflows/daily-bug-triage.md) instead of `sfa-jira-triage`. Agent-swarm runnable prompt: [prompts/daily-bug-triage.md](../prompts/daily-bug-triage.md).
+
+For **automated bug fixes** (groomed queue → draft PR), groom issues per
+[jira-issue-grooming.md](jira-issue-grooming.md) and run agent-swarm prompts under
+`prompts/`:
+
+| Prompt | Use |
+|--------|-----|
+| [jira-agent-pipeline.md](../prompts/jira-agent-pipeline.md) | Scheduled queue or `instruction_prompt: ACM-12345` |
+| [jira-solve.md](../prompts/jira-solve.md) | On-demand single key (`instruction_prompt: ACM-12345`) |
+
+There is **no** `docs/jira-solve.md` — solve workflows live only under `prompts/`.
 
 CVE dependency upgrade procedures: see [older-branch-dep-upgrade](../solutions/older-branch-dep-upgrade.md) in `solutions/`.
 

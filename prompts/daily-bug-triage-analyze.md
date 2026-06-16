@@ -5,6 +5,10 @@ Jira bug by searching the Server Foundation codebase for a likely root cause.
 
 **Read-only** — do not modify code, create branches, or open PRs.
 
+**Memory-safe** — the orchestrator clones at most one primary repo before invoking
+you. Do not run `./repos/sync-repos.sh` or clone additional repos unless the primary
+clone is missing and a single `clone_repo.sh` call is required.
+
 ## Input
 
 You receive a single bug object (from the orchestrator):
@@ -25,14 +29,17 @@ You receive a single bug object (from the orchestrator):
 }
 ```
 
+The orchestrator may also pass the **cloned repo path** (e.g.
+`repos/server-foundation/stolostron/managedcluster-import-controller`).
+
 ## Workspace
 
 **Base:** `/workspace/server-foundation-agent` (or repo root when running locally)
 
-- Read-only clones: `repos/` (run `./repos/sync-repos.sh` first if directories are empty)
+- On-demand clone (orchestrator or you): `bash workflows/daily-bug-triage/clone_repo.sh <org/repo>`
 - Repo inventory: `docs/repos.md`
 - Team ownership: `team-members/team-members.md`
-- Keyword → repo map: `workflows/daily-bug-triage.md` (Repo Identification section)
+- Keyword → repo map below and `workflows/daily-bug-triage.md` (Repo Identification)
 
 ## Procedure
 
@@ -60,11 +67,27 @@ Priority order:
 
 ### 2. Search codebase
 
-Under `repos/`, find controllers, handlers, CRDs, annotations, or behaviors
-described in the bug. Trace the reconcile path and pinpoint where expected behavior
-diverges.
+Search **only** the relevant repo under `repos/` (already cloned when possible).
 
-If the clone is missing or empty, set `analysis_status` to `error` and note it.
+- Use targeted `grep` / glob — do not load entire trees into context
+- Read at most **5–8** source files directly; prefer line-matched paths
+- Trace the reconcile path and pinpoint where expected behavior diverges
+
+If the clone is missing:
+
+```bash
+bash workflows/daily-bug-triage/clone_repo.sh stolostron/<repo-name>
+```
+
+**Fallback** (no clone, or clone failed): fetch specific files via GitHub API — do
+not clone multiple repos:
+
+```bash
+gh api repos/stolostron/<repo>/contents/<path> --jq .content | base64 -d | head -200
+```
+
+If no code access works, set `analysis_status` to `error` or `partial-analysis` and
+explain in `notes`.
 
 ### 3. Assess and output
 

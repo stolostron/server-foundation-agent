@@ -149,15 +149,20 @@ Co-authored-by: server-foundation-agent <sfa-bot@redhat.com>"
 
 ### Pull Requests — Label + Footer
 
-After creating a PR with `gh pr create`, **always**:
-
-1. Add the `sfa-assisted` label:
+After creating a PR with `gh pr create`, **always** add the `sfa-assisted` label.
+The label is **not** defined on most SF repos by default — `gh pr edit --add-label`
+fails with `'sfa-assisted' not found` unless the label exists first.
 
 ```bash
-gh pr edit <PR-NUMBER> --repo <org/repo> --add-label "sfa-assisted"
+PR_URL=$(gh pr create ...)
+PR_NUM="${PR_URL##*/}"
+bash scripts/ensure-sfa-assisted-label.sh <org/repo> "$PR_NUM"
 ```
 
-2. Include a footer line at the end of the PR description:
+`ensure-sfa-assisted-label.sh` creates the label on the target repo (idempotent), then
+applies it to the PR.
+
+Include a footer line at the end of the PR description:
 
 ```markdown
 ---
@@ -179,7 +184,7 @@ _— server-foundation-agent_
 
 | Data | Source | Query |
 |------|--------|-------|
-| PRs created | GitHub | `label:sfa-assisted is:pr org:stolostron` |
+| PRs created | GitHub | `label:sfa-assisted is:pr org:stolostron` or `author:app/acm-agent` |
 | Commits | Git | `git log --grep="Co-authored-by: server-foundation-agent"` |
 | Jira issues | Jira | `project = ACM AND labels = sfa-assisted` |
 | Jira comments | Jira | Search comment body for `server-foundation-agent` |

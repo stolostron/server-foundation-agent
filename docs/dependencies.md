@@ -71,6 +71,32 @@ All Python scripts use standard library only. Modules: `json`, `sys`, `os`, `dat
 
 **Autonomous mode**: When both `GH_APP_ID` and `GH_APP_INSTALLATION_ID` are set, the agent runs in autonomous mode — pushes directly to upstream repos with `sfa/` branch prefix instead of using the fork workflow. See [Development Guide](development-guide.md#push-workflow).
 
+### Agent-swarm pods (jira-agent-pipeline)
+
+GitHub App IAT generation runs **inside the agent pod**, not the Swarmer controller. The
+session must clone `stolostron/server-foundation-agent` (for `scripts/` and
+`build/scripts/`) and the agent image must include:
+
+| Tool | Purpose |
+|------|---------|
+| `openssl` | RS256 JWT signing for GitHub App IAT |
+| `jq` | Parse GitHub API responses |
+| `curl` | Request installation access tokens |
+| `gh` | PR status, create draft PRs |
+| `git` | Clone and push |
+
+Credentials come from `swarmer-agent-extra-env` (`GH_APP_ID`, `GH_APP_INSTALLATION_ID`,
+`GH_APP_PRIVATE_KEY`). Do **not** attach a session GitHub PAT when using App auth — Swarmer
+injects `GH_TOKEN` from the PAT and overrides App credentials.
+
+Rebuild the Crush agent image after changing `agent-swarm/Containerfile.crush`:
+
+```bash
+cd agent-swarm && make image-build-crush SILENT=1 && make image-push REGISTRY=...
+```
+
+Then redeploy Swarmer with the updated `AGENT_IMAGE_CRUSH`.
+
 ### Slack (1 skill)
 
 | Variable | Description | Used By |
@@ -137,7 +163,7 @@ Different skills connect to **different clusters** — there is no single shared
 
 | Workflow | CLI | Credentials | Runtime |
 |----------|-----|-------------|---------|
-| daily-bug-triage | curl, jq, gh | JIRA_EMAIL, JIRA_API_TOKEN, SLACK_WEBHOOK_URL | bash, python3 |
+| daily-bug-triage | curl, jq, gh, git | JIRA_EMAIL, JIRA_API_TOKEN, SLACK_WEBHOOK_URL | bash, python3; use `workflows/daily-bug-triage/clone_repo.sh` per bug (not full `sync-repos.sh` / yq in agent pods) |
 | daily-scrum-prep | curl, jq, gh | JIRA_EMAIL, JIRA_API_TOKEN, SLACK_WEBHOOK_URL | bash, python3 |
 | weekly-pr-report | gh, jq | GITHUB_TOKEN, SLACK_WEBHOOK_URL | bash, python3 |
 | weekly-bot-pr-hygiene | gh, jq | GITHUB_TOKEN, SLACK_WEBHOOK_URL | bash, python3 |

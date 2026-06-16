@@ -34,6 +34,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=github-app-key.sh
+source "${SCRIPT_DIR}/github-app-key.sh"
+
 # Default credential directory (KubeOpenCode convention)
 GITHUB_APP_DIR="${GITHUB_APP_DIR:-/etc/github-app}"
 
@@ -105,9 +109,7 @@ generate_jwt() {
 
     # Sign with RS256 (RSA-SHA256)
     local signature
-    signature=$(printf '%s' "$unsigned_token" | \
-        openssl dgst -binary -sha256 -sign <(printf '%s' "$private_key") | \
-        b64url_encode)
+    signature=$(sign_rs256_with_pem_key "$unsigned_token" "$private_key" | b64url_encode)
 
     printf '%s.%s' "$unsigned_token" "$signature"
 }
@@ -175,8 +177,10 @@ main() {
         return 1
     fi
 
-    # Validate private key format
-    if [[ ! "$GH_APP_PRIVATE_KEY" =~ ^-----BEGIN.*PRIVATE\ KEY----- ]]; then
+    # Normalize and validate private key (env secrets may use literal \n)
+    GH_APP_PRIVATE_KEY=$(normalize_github_app_private_key "$GH_APP_PRIVATE_KEY")
+    export GH_APP_PRIVATE_KEY
+    if ! is_valid_github_app_pem_key "$GH_APP_PRIVATE_KEY"; then
         echo "Error: GH_APP_PRIVATE_KEY does not appear to be a valid PEM key" >&2
         return 1
     fi
