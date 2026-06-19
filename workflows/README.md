@@ -14,6 +14,7 @@ Workflows are **user-triggered or scheduled** multi-phase processes. The user kn
 | [weekly-pr-report](weekly-pr-report.md) | Generate weekly PR activity report for the team | Weekly / user request |
 | [agent-pr-action-needed](agent-pr-action-needed.md) | Slack digest of `acm-agent` draft/approval-blocked PRs after jira-pipeline | Weekday cron / user request ([prompt](../prompts/agent-pr-action-needed.md)) |
 | [jira-pipeline-pr-review](jira-pipeline-pr-review.md) | Address CodeRabbit/human review feedback on jira-pipeline PRs; squash + force-push | Weekday cron / user request ([prompt](../prompts/jira-pipeline-pr-review.md)) |
+| [cve-pr-status](cve-pr-status.md) | Open CVE Jira issues vs matching open fix PRs; Slack digest | Weekday cron / user request ([prompt](../prompts/cve-pr-status.md)) |
 | [bug-analyze](bug-analyze.md) | Analyze Jira bugs for SF relevance and reproducibility scoring | On demand |
 
 ## Adding a New Workflow

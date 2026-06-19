@@ -56,6 +56,7 @@ Agent queue JQL and extended docs: [`_sfa-conventions.md`](_sfa-conventions.md)
 | `jira-pipeline.md` | `sfa-jira-pipeline` | `0 9,17 * * 1-5` (weekdays 09:00 and 17:00 Asia/Shanghai) |
 | `agent-pr-action-needed.md` | `sfa-agent-pr-action-needed` | `30 9,17 * * 1-5` (30 min after pipeline) |
 | `jira-pipeline-pr-review.md` | `sfa-jira-pipeline-pr-review` | `0 10,18 * * 1-5` (after pipeline; address review feedback) |
+| `cve-pr-status.md` | `sfa-cve-pr-status` | `0 10 * * 1-5` (weekdays 10:00 Asia/Shanghai) |
 | `jira-solve.md` | `sfa-jira-solve` | On-demand + `instruction_prompt: ACM-12345` |
 
 Triage also references helper scripts under `workflows/daily-bug-triage/` and optional
