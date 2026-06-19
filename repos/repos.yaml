@@ -18,6 +18,14 @@
 #   - Any task that needs more than a single file's content
 #
 # For simple metadata queries (issue counts, PR status), prefer GitHub API.
+#
+# Container image conventions (downstream stolostron repos):
+#   MCE images: registry.redhat.io/multicluster-engine/<component>-rhel{8,9}
+#   ACM images: registry.redhat.io/rhacm2/<component>-rhel{8,9}
+#   CI mirror:  quay.io/stolostron/<component>
+#   Source of truth: Dockerfile.rhtap LABEL name= in each repo (on main).
+#   rhel9 is current on main; active z-stream branches may still publish -rhel8.
+#   See docs/build-release/mce-vs-acm-builds.md for MCE vs ACM build paths.
 
 repos:
 
@@ -51,24 +59,127 @@ repos:
     stolostron:
       - repo: stolostron/ocm
         description: OCM downstream
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: work
+              dockerfile: build/Dockerfile.work.rhtap
+            - name: placement
+              dockerfile: build/Dockerfile.placement.rhtap
+            - name: registration
+              dockerfile: build/Dockerfile.registration.rhtap
+            - name: registration-operator
+              dockerfile: build/Dockerfile.registration-operator.rhtap
+            - name: addon-manager
+              dockerfile: build/Dockerfile.addon.rhtap
+          acm_aliases:
+            - acm-cluster-manager-addon-manager
       - repo: stolostron/managedcluster-import-controller
         description: Manages cluster imports
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: managedcluster-import-controller
+              dockerfile: build/Dockerfile.rhtap
       - repo: stolostron/multicloud-operators-foundation
         description: Foundation operators
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: multicloud-manager
+              dockerfile: Dockerfile.rhtap
       - repo: stolostron/cluster-proxy
         description: Konnectivity-based cluster proxy
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: cluster-proxy
+              dockerfile: cmd/Dockerfile.rhtap
+          acm_aliases:
+            - cluster-proxy
       - repo: stolostron/clusterlifecycle-state-metrics
         description: Cluster lifecycle metrics
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: clusterlifecycle-state-metrics
+              dockerfile: build/Dockerfile.rhtap
+          acm_aliases:
+            - clusterlifecycle-state-metrics
       - repo: stolostron/managed-serviceaccount
         description: Managed ServiceAccount
+        images:
+          product: mce
+          branch_pattern: backplane-*
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: managed-serviceaccount
+              dockerfile: Dockerfile.rhtap
       - repo: stolostron/cluster-proxy-addon
         description: Cluster proxy addon (deprecated from backplane-2.11)
+        images:
+          product: mce
+          branch_pattern: backplane-2.6..2.10
+          registry: registry.redhat.io/multicluster-engine
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: cluster-proxy-addon
+              dockerfile: Dockerfile.rhtap
+              note: Legacy LABEL omits product prefix; also published as multicluster-engine/cluster-proxy-addon-rhel{8,9}
+          acm_aliases:
+            - cluster-proxy-addon
       - repo: stolostron/klusterlet-addon-controller
         description: Klusterlet addon controller
+        images:
+          product: acm
+          branch_pattern: release-*
+          registry: registry.redhat.io/rhacm2
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: klusterlet-addon-controller
+              dockerfile: Dockerfile.rhtap
       - repo: stolostron/cluster-permission
         description: Cluster permission management (migrated to MCE in 2.17)
+        images:
+          product: both
+          branch_pattern: backplane-* and release-*
+          mce:
+            registry: registry.redhat.io/multicluster-engine
+            components:
+              - name: cluster-permission
+                dockerfile: Dockerfile.rhtap
+          acm:
+            registry: registry.redhat.io/rhacm2
+            components:
+              - name: acm-cluster-permission
+                note: Legacy ACM image name; pre-2.17 primary build target
+          quay_mirror: quay.io/stolostron
       - repo: stolostron/multicluster-role-assignment
         description: Multicluster RBAC
+        images:
+          product: acm
+          branch_pattern: release-2.15..2.17
+          registry: registry.redhat.io/rhacm2
+          quay_mirror: quay.io/stolostron
+          components:
+            - name: multicluster-role-assignment
+              dockerfile: Dockerfile.rhtap
 
   # ============================================================
   # Forked dependency libraries (SF-specific changes)
@@ -78,8 +189,10 @@ repos:
     stolostron:
       - repo: stolostron/apiserver-network-proxy
         description: ANP fork, key dependency of cluster-proxy
+        images: none  # library fork; binaries ship inside cluster-proxy images
       - repo: stolostron/grpc-go
         description: gRPC-Go fork, key dependency of cluster-proxy
+        images: none  # library fork; no standalone container image
 
   # ============================================================
   # Installer components (not SF-owned, but tightly coupled)
