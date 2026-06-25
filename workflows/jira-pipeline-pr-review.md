@@ -2,7 +2,10 @@
 
 After **`jira-pipeline`** (or on-demand **`jira-solve`**) opens a fix PR and humans
 mark it ready, CodeRabbit and human reviewers leave review comments. This workflow
-**addresses that feedback**, squashes commits, and **force-pushes** the branch.
+**addresses code-fix review feedback**, squashes commits, and **force-pushes** the branch.
+
+Only feedback that requires **edits to code or tests in the PR diff** is in scope.
+Process, CI-grooming, and other non-code comments are skipped.
 
 Agent-swarm runnable prompt: [prompts/jira-pipeline-pr-review.md](../prompts/jira-pipeline-pr-review.md)
 
@@ -106,18 +109,33 @@ python3 workflows/jira-pipeline-pr-review/collect_review_feedback.py \
 
 `collect_review_feedback.py` marks a PR as needing action when:
 
-- `reviewDecision == CHANGES_REQUESTED`, or
-- Unresolved review threads with actionable comments from CodeRabbit / humans
+- Unresolved review threads with **code-fix** comments from CodeRabbit / humans, or
+- `reviewDecision == CHANGES_REQUESTED` **and** the review body or inline threads
+  contain actionable code-change requests
 
-Picks the candidate with the **oldest** feedback timestamp (FIFO queue).
+Non-code feedback alone (e.g. `/ok-to-test`, "mark ready", CI rerun, questions)
+does **not** qualify.
+
+Picks the candidate with the **oldest** code-fix feedback timestamp (FIFO queue).
+
+### Code-fix scope (Phase 4)
+
+Before editing, classify each comment:
+
+| Act on | Skip |
+|--------|------|
+| Inline diff fixes, test additions, CodeRabbit suggested patches | Process/grooming, CI-only, questions, LGTM, out-of-scope work |
+| Security/quality tied to changed lines | Jira/release notes, informational walkthroughs |
+
+If no code-fix items remain after classification: stop without push.
 
 ### Phase 3–5: Fix, squash, force-push
 
 See [prompts/jira-pipeline-pr-review.md](../prompts/jira-pipeline-pr-review.md) for
 agent instructions. Key requirements:
 
-1. Address all actionable unresolved feedback
-2. `make check` + `make test` before push
+1. Classify feedback; address **code-fix** items only
+2. `make check` + `make test` before push (when code changed)
 3. Squash to one commit via `git reset --soft $(git merge-base HEAD origin/<base>)`
 4. `git push --force-with-lease` (required — agent branches accumulate commits)
 
@@ -148,9 +166,10 @@ Optional mid-day pass: `0 14 * * 1-5`.
 
 ## Edge cases
 
-- **No candidates:** Stop successfully — no pipeline PRs need feedback
-- **Approved PR with open nit threads:** Script still picks if threads are unresolved;
-  agent may resolve trivial items or skip non-blocking nits (note in PR comment)
+- **No candidates:** Stop successfully — no pipeline PRs need code-fix feedback
+- **Only non-code feedback:** Classify and skip; do not force-push
+- **Approved PR with open nit threads:** Only act on threads requesting code changes;
+  skip acknowledgments and process notes
 - **CHANGES_REQUESTED from human:** Always address before push
 - **Concurrent human pushes:** `--force-with-lease` fails safely — report and stop
 - **Missing make targets:** Run available verification; note in summary

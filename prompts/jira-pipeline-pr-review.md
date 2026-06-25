@@ -1,8 +1,8 @@
 # SF jira-pipeline PR review feedback (agent-swarm)
 
 Find open PRs created by **`jira-pipeline`** / **`jira-solve`** (`acm-agent[bot]`,
-`sfa-assisted`, `ACM-*` title), address review comments from CodeRabbit and human reviewers,
-squash to a single commit, and **force-push** the branch.
+`sfa-assisted`, `ACM-*` title), address **code-fix** review comments from CodeRabbit
+and human reviewers, squash to a single commit, and **force-push** the branch.
 
 Designed for **non-interactive** scheduled runs (weekday cron, after pipeline slots).
 Processes **exactly one PR** per run. Jira: [ACM-35748](https://redhat.atlassian.net/browse/ACM-35748).
@@ -18,6 +18,10 @@ human reviewers leave inline and summary review comments. `agent-pr-action-neede
 only notifies about draft/approval gates — it does not address feedback. This
 prompt closes that loop for **pipeline PRs only** (not human-authored PRs or other
 bots).
+
+**Scope:** implement feedback that requires **edits to code (or tests) in the PR
+diff** only. Skip process, CI-grooming, and other non-code comments — leave those
+for humans.
 
 ## SFA conventions
 
@@ -45,7 +49,7 @@ Include a PR only when **all** of:
 | Label | `sfa-assisted` |
 | Title | Contains `ACM-<digits>` (pipeline PR title format) |
 | State | Open, **not** draft |
-| Feedback | `reviewDecision: CHANGES_REQUESTED` **or** unresolved actionable review threads / comments |
+| Feedback | Unresolved **code-fix** review threads, or `CHANGES_REQUESTED` with code-change requests |
 
 Branch name is **not** a gate. Common shapes include `sfa/fix-ACM-<digits>`,
 `sfa/fix-ACM-<digits>-v2` (retries), and `sfa/fix/ACM-<digits>` (legacy clone path).
@@ -57,7 +61,36 @@ Exclude:
 - Konflux / dependabot / other bot PRs
 - Draft PRs (still in human groom queue)
 - PRs missing `sfa-assisted` or `ACM-*` in the title
-- PRs with no actionable reviewer feedback
+- PRs with no actionable **code-fix** reviewer feedback
+
+## Code-fix scope
+
+Classify every feedback item **before** editing. Implement only items that require
+changes to source or test files in the PR branch.
+
+**Act on** (code changes required):
+
+| Category | Examples |
+|----------|----------|
+| Inline diff comments | Fix logic, error handling, naming, structure on a changed line |
+| Requested tests | Add or update unit/integration tests for the fix |
+| CodeRabbit actionable items | Suggested patches, ` ```suggestion ` blocks, concrete refactors |
+| Security/quality on diff | Findings tied to a specific line or pattern in the changed files |
+
+**Skip** (note in summary; do **not** implement or reply as if fixed):
+
+| Category | Examples |
+|----------|----------|
+| Process / grooming | `/ok-to-test`, `/retest`, "mark ready", label/title/description edits, merge/rebase timing |
+| CI-only | "tests failed", "please rerun CI" with no specific code fix |
+| Questions / discussion | "Is this intentional?", design or product questions with no requested change |
+| Acknowledgments | LGTM, looks good, thanks, +1, nit with no change requested |
+| Out-of-scope work | New features, unrelated refactors, files outside the bug-fix purpose |
+| Non-code process | Jira workflow, release notes, changelog, deployment steps (unless the PR already edits those files for the fix) |
+| Informational bot output | CodeRabbit walkthrough/summary with no actionable code items |
+
+If classification yields **zero** code-fix items: report "no code-fix review feedback",
+stop successfully, and **do not** force-push.
 
 ## Workflow
 
@@ -97,7 +130,7 @@ python3 workflows/jira-pipeline-pr-review/collect_review_feedback.py \
 ```
 
 Read `.pick` from `review_candidates.json`. If `pick` is `null`, report
-"no pipeline PRs need review feedback" and stop successfully.
+"no pipeline PRs need code-fix review feedback" and stop successfully.
 
 Record: `repo`, `number`, `url`, `jira_key`, `branch`, `feedback_reason`.
 
@@ -117,18 +150,25 @@ cd "$WORKTREE"
    gh api repos/<org/repo>/pulls/<number>/comments --paginate
    gh api graphql -f query='...'   # unresolved reviewThreads (see workflow doc)
    ```
-2. **Prioritize** actionable items:
-   - Inline review comments on changed lines (unresolved threads)
-   - `CHANGES_REQUESTED` review summaries
-   - CodeRabbit (`coderabbitai[bot]`) and human reviewer suggestions
-3. **Skip** bot automation noise: `github-actions`, `openshift-ci-robot`, prow
-   commands, author's own comments
-4. **Implement** minimal fixes per comment; keep scope to review feedback only
-5. **Reply** on the PR when helpful — brief note per addressed thread:
+2. **Classify** each item against [Code-fix scope](#code-fix-scope). Build two lists:
+   `code_fix_items` and `skipped_non_code_items`.
+3. **Prioritize** `code_fix_items` only:
+   - Unresolved inline threads on changed lines with a requested code/test change
+   - `CHANGES_REQUESTED` summaries that name concrete code issues
+   - CodeRabbit actionable suggestions (not walkthrough-only summaries)
+4. **Skip** always (never implement):
+   - Bot automation noise: `github-actions`, `openshift-ci-robot`, prow commands,
+     author's own comments
+   - All items in the **Skip** table under Code-fix scope
+5. If `code_fix_items` is empty: stop Phase 4 here — no push (see Code-fix scope).
+6. **Implement** minimal fixes for `code_fix_items` only; do not expand scope beyond
+   those items
+7. **Reply** on the PR when helpful — list addressed code fixes and explicitly note
+   skipped non-code items (no reply needed when nothing was implemented):
    ```bash
-   gh pr comment <number> --repo <org/repo> --body "Addressed review feedback: ..."
+   gh pr comment <number> --repo <org/repo> --body "Addressed code review: ..."
    ```
-6. Run verification **sequentially** in the worktree:
+8. Run verification **sequentially** in the worktree:
    ```bash
    make check    # allow ≥ 5 min
    make test
@@ -136,6 +176,9 @@ cd "$WORKTREE"
    Fix failures caused by your changes. Do not skip when targets exist.
 
 ### Phase 5: Squash commits and force-push
+
+Run Phase 5 **only when Phase 4 implemented at least one code fix**. If every item
+was skipped as non-code, do not squash, commit, or push.
 
 Squash **all** commits on the PR branch into **one** commit, then force-push.
 Use the PR's merge base (target branch) as the squash parent.
@@ -164,7 +207,7 @@ multiple commits from prior agent runs.
 
 Do **not** change PR title, draft state, labels, or merge the PR.
 
-### Phase 6: Jira follow-up (when `jira_key` present)
+### Phase 6: Jira follow-up (when `jira_key` present and code fixes were pushed)
 
 MCP `add_comment` on the linked issue:
 
@@ -184,8 +227,9 @@ _— server-foundation-agent_
 Report:
 
 - PR repo, number, URL, Jira key
-- Feedback items addressed (count + brief list)
-- Squash commit message
+- Code-fix items addressed (count + brief list)
+- Non-code items skipped (count + brief list)
+- Squash commit message (or "no push — no code-fix feedback")
 - Force-push status
 - `make check` / `make test` status
 - Jira comment posted (yes/no)
@@ -215,6 +259,8 @@ Report:
 ## Do not
 
 - Ask the user for confirmation (automated mode)
+- Implement non-code review feedback (process, CI groom, questions, scope creep)
+- Force-push when no code-fix items were implemented
 - Process human-authored or non-pipeline PRs
 - Redirect stderr into JSON artifacts (`2>&1` on Phase 1–2)
 - Approve, merge, close, or mark PRs ready

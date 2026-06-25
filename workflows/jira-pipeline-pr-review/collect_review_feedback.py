@@ -7,8 +7,9 @@ Usage:
 Input:  JSON array from filter_pipeline_prs.jq
 Output: JSON object { candidates: [...], pick: <first or null> }
 
-A PR is a candidate when it has actionable unresolved feedback from CodeRabbit,
-human reviewers, or reviewDecision CHANGES_REQUESTED.
+A PR is a candidate when it has unresolved **code-fix** feedback from CodeRabbit,
+human reviewers, or CHANGES_REQUESTED reviews that request code changes.
+Non-code comments (process, CI groom, questions) are ignored.
 """
 
 from __future__ import annotations
@@ -47,6 +48,49 @@ IGNORED_REVIEWERS = frozenset({
 _PROW_COMMAND_RE = __import__("re").compile(
     r"^/(ok-to-test|retest|retest-required|test|approve|approve cancel|lgtm|hold)\b",
     __import__("re").IGNORECASE,
+)
+
+# Acknowledgments and non-actionable one-liners on inline threads.
+_NON_CODE_INLINE_RE = __import__("re").compile(
+    r"^(?:lgtm|looks good|nice|thanks|thank you|\+1|ack|done|will take a look)[\.!?\s]*$",
+    __import__("re").IGNORECASE,
+)
+
+# Process / grooming language — not code fixes.
+_PROCESS_RE = __import__("re").compile(
+    r"(?:/ok-to-test|/retest|/lgtm|/hold|"
+    r"\bmark (?:this )?(?:pr )?ready\b|"
+    r"\bupdate (?:the )?(?:pr )?(?:title|description)\b|"
+    r"\badd (?:the )?labels?\b|"
+    r"\bplease rebase\b|\bneeds rebase\b|"
+    r"\bmerge when\b|\brelease notes?\b|\bchangelog\b|"
+    r"\bjira (?:ticket|issue|link)\b)",
+    __import__("re").IGNORECASE,
+)
+
+# CI / build failure notices without a concrete code fix request.
+_CI_ONLY_RE = __import__("re").compile(
+    r"(?:\b(?:ci|tests?|build|prow)\s+(?:failed|failing|red|broken)\b|"
+    r"\bplease\s+(?:re)?run(?:\s+(?:the\s+)?(?:tests?|ci))?\b|"
+    r"\b(?:re)?test(?:\s+required)?\b)",
+    __import__("re").IGNORECASE,
+)
+
+# Strong code-change signals (beyond bare "test" in "tests failed").
+_STRONG_CODE_FIX_RE = __import__("re").compile(
+    r"(?:```(?:suggestion)?|suggested change|diff --git|"
+    r"\b(?:fix(?:ed|es)?|change(?:d|s)?|update(?:d|s)?|add(?:ed|s)?|"
+    r"remove(?:d|s)?|handle(?:s|d)?|return(?:s|ed)?|error|nil|null|panic|"
+    r"race|leak|bug|refactor|rename|extract|inline|"
+    r"assert|mock|coverage|unit test|add test)\b)",
+    __import__("re").IGNORECASE,
+)
+
+# Question-only comments with no fix request.
+_QUESTION_ONLY_RE = __import__("re").compile(
+    r"^(?:is this|why (?:is|does|did)|what (?:is|does|did)|can you explain|"
+    r"could you explain|does this|should this)\b.*\?\s*$",
+    __import__("re").IGNORECASE | __import__("re").DOTALL,
 )
 
 
@@ -91,11 +135,46 @@ def _is_prow_command(body: str) -> bool:
     return bool(_PROW_COMMAND_RE.match(first_line.strip()))
 
 
+def _is_code_fix_comment(body: str, *, is_inline: bool = False) -> bool:
+    """True when the comment requests a code or test change in the PR diff."""
+    text = body.strip()
+    if not text or _is_prow_command(text):
+        return False
+    if _NON_CODE_INLINE_RE.match(text):
+        return False
+    if _QUESTION_ONLY_RE.match(text) and "```" not in text:
+        return False
+
+    has_code_signal = bool(_STRONG_CODE_FIX_RE.search(text))
+    has_process = bool(_PROCESS_RE.search(text))
+    is_ci_only = bool(_CI_ONLY_RE.search(text))
+
+    if is_ci_only and not has_code_signal:
+        return False
+
+    if is_inline:
+        # Inline threads attach to diff lines; treat as code-fix unless clearly not.
+        if has_process and not has_code_signal:
+            return False
+        if is_ci_only and not has_code_signal:
+            return False
+        if text.endswith("?") and not has_code_signal:
+            return False
+        return True
+
+    # Top-level / review summaries need explicit code-fix language.
+    if has_process and not has_code_signal:
+        return False
+    return has_code_signal
+
+
 def _is_actionable_issue_comment(login: str, body: str) -> bool:
-    """Top-level PR comments: CodeRabbit summaries only, not prow or human commands."""
+    """Top-level PR comments: CodeRabbit code-fix summaries only."""
     if not body.strip() or _is_prow_command(body):
         return False
-    return _is_coderabbit_reviewer(login)
+    if not _is_coderabbit_reviewer(login):
+        return False
+    return _is_code_fix_comment(body, is_inline=False)
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -231,7 +310,7 @@ def _fetch_issue_comments(repo: str, number: int) -> list[dict[str, Any]]:
 
 
 def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
-    """Return ISO timestamp of newest actionable feedback, if any."""
+    """Return ISO timestamp of newest code-fix feedback, if any."""
     repo = pr["repo"]
     number = pr["number"]
     latest: datetime | None = None
@@ -248,6 +327,11 @@ def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
             continue
         if _is_prow_command(body):
             continue
+        if state == "CHANGES_REQUESTED" and not _is_code_fix_comment(body, is_inline=False):
+            # CHANGES_REQUESTED without code-fix text may still have inline threads.
+            continue
+        if state == "COMMENTED" and not _is_code_fix_comment(body, is_inline=False):
+            continue
         submitted = review.get("submitted_at")
         if submitted:
             dt = _parse_iso(submitted)
@@ -262,6 +346,8 @@ def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
             body = (comment.get("body") or "").strip()
             if not body or not _is_actionable_reviewer(login):
                 continue
+            if not _is_code_fix_comment(body, is_inline=True):
+                continue
             created = comment.get("createdAt")
             if created:
                 dt = _parse_iso(created)
@@ -272,7 +358,7 @@ def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
     for comment in _fetch_issue_comments(repo, number):
         login = (comment.get("user") or {}).get("login", "")
         body = (comment.get("body") or "").strip()
-        if not body or not _is_actionable_reviewer(login):
+        if not _is_actionable_issue_comment(login, body):
             continue
         created = comment.get("created_at")
         if created:
@@ -285,14 +371,11 @@ def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
 
 def _needs_feedback(pr: dict[str, Any]) -> tuple[bool, str, str | None]:
     """Return (needs_action, reason, latest_feedback_at)."""
-    if pr.get("review_decision") == "CHANGES_REQUESTED":
-        return True, "review_decision_changes_requested", None
-
     latest = _latest_feedback_at(pr)
     if latest:
-        return True, "unresolved_review_feedback", latest
+        return True, "unresolved_code_fix_feedback", latest
 
-    return False, "no_actionable_feedback", None
+    return False, "no_code_fix_feedback", None
 
 
 def main() -> int:
