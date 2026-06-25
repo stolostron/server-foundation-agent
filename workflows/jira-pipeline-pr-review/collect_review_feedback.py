@@ -76,13 +76,13 @@ _CI_ONLY_RE = __import__("re").compile(
     __import__("re").IGNORECASE,
 )
 
-# Strong code-change signals (beyond bare "test" in "tests failed").
+# Strong code-change signals — avoid bare action verbs (change/update/add/remove)
+# that overlap with process/grooming language; _PROCESS_RE handles those cases.
 _STRONG_CODE_FIX_RE = __import__("re").compile(
     r"(?:```(?:suggestion)?|suggested change|diff --git|"
-    r"\b(?:fix(?:ed|es)?|change(?:d|s)?|update(?:d|s)?|add(?:ed|s)?|"
-    r"remove(?:d|s)?|handle(?:s|d)?|return(?:s|ed)?|error|nil|null|panic|"
-    r"race|leak|bug|refactor|rename|extract|inline|"
-    r"assert|mock|coverage|unit test|add test)\b)",
+    r"\b(?:fix(?:ed|es)?|handle(?:s|d)?|return(?:s|ed)?|"
+    r"error|nil|null|panic|race|leak|bug|refactor|rename|extract|inline|"
+    r"assert|mock|coverage|(?:unit|regression) test|add (?:a )?test)\b)",
     __import__("re").IGNORECASE,
 )
 
@@ -163,16 +163,16 @@ def _is_code_fix_comment(body: str, *, is_inline: bool = False) -> bool:
         return True
 
     # Top-level / review summaries need explicit code-fix language.
-    if has_process and not has_code_signal:
+    if has_process:
         return False
     return has_code_signal
 
 
 def _is_actionable_issue_comment(login: str, body: str) -> bool:
-    """Top-level PR comments: CodeRabbit code-fix summaries only."""
+    """Top-level PR comments: code-fix content from non-ignored reviewers."""
     if not body.strip() or _is_prow_command(body):
         return False
-    if not _is_coderabbit_reviewer(login):
+    if _is_ignored(login):
         return False
     return _is_code_fix_comment(body, is_inline=False)
 
@@ -309,36 +309,59 @@ def _fetch_issue_comments(repo: str, number: int) -> list[dict[str, Any]]:
     ])
 
 
+def _latest_review_per_reviewer(reviews: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Keep only each reviewer's most recent review by submitted_at."""
+    latest: dict[str, dict[str, Any]] = {}
+    for review in reviews:
+        login = (review.get("user") or {}).get("login", "")
+        submitted = review.get("submitted_at")
+        if not login or not submitted:
+            continue
+        prev = latest.get(login)
+        if prev is None or _parse_iso(submitted) > _parse_iso(prev["submitted_at"]):
+            latest[login] = review
+    return latest
+
+
 def _latest_feedback_at(pr: dict[str, Any]) -> str | None:
-    """Return ISO timestamp of newest code-fix feedback, if any."""
+    """Return ISO timestamp of newest unresolved code-fix feedback, if any."""
     repo = pr["repo"]
     number = pr["number"]
     latest: datetime | None = None
 
-    for review in _fetch_reviews(repo, number):
-        login = (review.get("user") or {}).get("login", "")
-        state = review.get("state", "")
-        if state not in ("CHANGES_REQUESTED", "COMMENTED"):
-            continue
-        if not _is_actionable_reviewer(login):
-            continue
-        body = (review.get("body") or "").strip()
-        if state == "COMMENTED" and not body:
-            continue
-        if _is_prow_command(body):
-            continue
-        if state == "CHANGES_REQUESTED" and not _is_code_fix_comment(body, is_inline=False):
-            # CHANGES_REQUESTED without code-fix text may still have inline threads.
-            continue
-        if state == "COMMENTED" and not _is_code_fix_comment(body, is_inline=False):
-            continue
-        submitted = review.get("submitted_at")
-        if submitted:
-            dt = _parse_iso(submitted)
-            if latest is None or dt > latest:
-                latest = dt
+    threads = _fetch_review_threads(repo, number)
+    has_unresolved_threads = any(not t.get("isResolved") for t in threads)
+    review_decision = pr.get("review_decision") or "NONE"
 
-    for thread in _fetch_review_threads(repo, number):
+    # Review summary bodies are stale once approved with no open threads.
+    include_review_summaries = (
+        review_decision == "CHANGES_REQUESTED" or has_unresolved_threads
+    )
+
+    if include_review_summaries:
+        for review in _latest_review_per_reviewer(_fetch_reviews(repo, number)).values():
+            login = (review.get("user") or {}).get("login", "")
+            state = review.get("state", "")
+            if state in ("APPROVED", "DISMISSED"):
+                continue
+            if state not in ("CHANGES_REQUESTED", "COMMENTED"):
+                continue
+            if not _is_actionable_reviewer(login):
+                continue
+            body = (review.get("body") or "").strip()
+            if state == "COMMENTED" and not body:
+                continue
+            if _is_prow_command(body):
+                continue
+            if not _is_code_fix_comment(body, is_inline=False):
+                continue
+            submitted = review.get("submitted_at")
+            if submitted:
+                dt = _parse_iso(submitted)
+                if latest is None or dt > latest:
+                    latest = dt
+
+    for thread in threads:
         if thread.get("isResolved"):
             continue
         for comment in thread.get("comments", {}).get("nodes", []):
