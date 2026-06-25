@@ -1,7 +1,7 @@
 # Daily Bug Triage Workflow
 
 Automatically triage all Server Foundation Jira bugs in "New" status by analyzing the codebase to find root causes,
-then send a summary Slack notification every weekday morning. **Draft PR auto-fix (Phase 2.5) is off by default.**
+then send a summary Slack notification every weekday morning. **Also transitions In Progress bugs to Review when a linked fix PR is merged** (Phase 0). **Draft PR auto-fix (Phase 2.5) is off by default.**
 
 ## Agent-swarm prompt
 
@@ -24,11 +24,39 @@ detailed reference (scripts, Slack format, edge cases).
 ## Workflow Phases
 
 ```
-Phase 1: Collect    →  Phase 1.5: Dedup     →  Phase 2: Analyze        →  Phase 2.5: Auto-Fix (opt-in)  →  Phase 3: Report    →  Phase 3.5: Jira     →  Phase 4: Distribute
-sfa-jira-search        check Jira comments      sub-agents per bug          draft PR only if ENABLE_AUTO_FIX   generate Slack         post full analysis      sfa-slack-notify
-(status=New, type=Bug)  for prior agent           (codebase deep-dive)        (skipped by default)             payload                as Jira comments
-                        analysis
+Phase 0: PR merge   →  Phase 1: Collect    →  Phase 1.5: Dedup     →  Phase 2: Analyze        →  Phase 2.5: Auto-Fix (opt-in)  →  Phase 3: Report    →  Phase 3.5: Jira     →  Phase 4: Distribute
+merged PR → Review     sfa-jira-search           check Jira comments      sub-agents per bug          draft PR only if ENABLE_AUTO_FIX   generate Slack         post full analysis      sfa-slack-notify
+(In Progress bugs)     (status=New, type=Bug)    for prior agent           (codebase deep-dive)        (skipped by default)             payload                as Jira comments
 ```
+
+---
+
+## Phase 0: Merged PR → Review (In Progress bugs)
+
+Runs at the **start** of every triage run (including days with zero New bugs).
+Mirrors `fix-cve.md` §6.5 (merged PR detection) but transitions SF **Bug** issues to
+**Review** instead of closing them.
+
+Skip when `SKIP_PR_MERGE_REVIEW` is in `instruction_prompt`.
+
+### 0.1 Query In Progress bugs
+
+```jql
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+```
+
+### 0.2 For each issue
+
+1. Re-fetch status — skip if already Review, Testing, Resolved, Closed, or Done
+2. Find linked PR URLs from Jira development field, agent comments, or
+   `gh pr list --state merged --search "ACM-XXXXX in:title"` across candidate SF repos
+3. `gh pr view --json state,mergedAt` — proceed only when `state` is `MERGED`
+4. Post Jira comment (`Bug Fix: PR merged` + `server-foundation-agent` footer)
+5. MCP `transition_issue` → **Review**
+6. Record in `.output/bug-triage/pr_merge_review.json`
+
+If a prior `Bug Fix: PR merged` comment exists but status is still In Progress, retry
+the transition (same retry rule as `fix-cve.md` §6.5).
 
 ---
 

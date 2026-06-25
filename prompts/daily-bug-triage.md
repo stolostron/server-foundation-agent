@@ -1,9 +1,12 @@
 # SF daily bug triage (agent-swarm)
 
 Triage all Server Foundation Jira bugs in **New** status: codebase root-cause
-analysis, Jira comments, and Slack summary. **Auto-fix (draft PRs) is off by
-default** — enable only with `ENABLE_AUTO_FIX` in `instruction_prompt`. Issues
-labeled `issue-for-agent` are handled by `jira-pipeline.md`, not this workflow.
+analysis, Jira comments, and Slack summary. Also detect **merged** fix PRs for
+**In Progress** bugs and transition the corresponding Jira to **Review** (same
+pattern as `fix-cve.md` §6.5, but Review instead of Closed). **Auto-fix (draft
+PRs) is off by default** — enable only with `ENABLE_AUTO_FIX` in
+`instruction_prompt`. Issues labeled `issue-for-agent` are handled by
+`jira-pipeline.md`, not this workflow.
 
 Designed for **non-interactive** scheduled runs (weekday cron). Detailed reference:
 `workflows/daily-bug-triage.md`.
@@ -18,8 +21,9 @@ Designed for **non-interactive** scheduled runs (weekday cron). Detailed referen
 
 **Jira:** MCP tools only (`search_issues` / `searchJiraIssuesUsingJql`, `get_issue` /
 `getJiraIssue`, `add_comment` / `addCommentToJiraIssue`, `update_issue` /
-`editJiraIssue`). Host `https://redhat.atlassian.net`, project ACM. No Jira CLI or
-curl except script fallbacks.
+`editJiraIssue`, `transition_issue` / `transitionJiraIssue`). Host
+`https://redhat.atlassian.net`, project ACM. No Jira CLI or curl except script
+fallbacks.
 
 **New-bugs JQL:**
 
@@ -35,7 +39,8 @@ project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status
 **Triage label:** `agent-triaged` — add via MCP `update_issue` after each successful
 analysis comment (Phase 3.5). Do not remove other labels.
 
-**GitHub:** `gh` for draft PRs (Phase 2.5 only when `ENABLE_AUTO_FIX`). **Slack:** `SLACK_WEBHOOK_URL` + helper script (Phase 4).
+**GitHub:** `gh` for PR state checks (Phase 0) and draft PRs (Phase 2.5 only when
+`ENABLE_AUTO_FIX`). **Slack:** `SLACK_WEBHOOK_URL` + helper script (Phase 4).
 
 **Output dir:** `.output/bug-triage/` (under working directory)
 
@@ -46,8 +51,88 @@ Extended conventions: `prompts/_sfa-conventions.md`
 ## Workflow
 
 ```
-Collect → Dedup → Analyze (sub-agents) → [Auto-fix if ENABLE_AUTO_FIX] → Report → Jira comments → Slack
+PR merge → Review → Collect → Dedup → Analyze (sub-agents) → [Auto-fix if ENABLE_AUTO_FIX] → Report → Jira comments → Slack
 ```
+
+## Phase 0: Transition to Review when fix PR is merged
+
+Run at the **start** of every run (even when there are zero New bugs). Non-interactive
+— do not ask the user. Skip this phase when `instruction_prompt` contains
+`SKIP_PR_MERGE_REVIEW`.
+
+**JQL (MCP `search_issues`):**
+
+```jql
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+```
+
+1. `mkdir -p .output/bug-triage`
+2. MCP search with JQL above (`max_results`: `50`)
+3. Initialize `.output/bug-triage/pr_merge_review.json` as `[]` — append one row per
+   action this run
+
+For each **In Progress** issue:
+
+1. **Skip unless still In Progress** — MCP `get_issue`; if status is **Review**,
+   **Testing**, **Resolved**, **Closed**, or **Done**, do not transition.
+
+2. **Skip if already transitioned this run previously** — agent-signed comment contains
+   `Bug Fix: PR merged` and `_— server-foundation-agent_` **and** status is already
+   **Review** or later.
+
+   > **Note:** A `Bug Fix: PR merged` comment alone is **not** a skip when status is
+   > still **In Progress** — the comment may have been posted without a successful Jira
+   > transition (or the issue was reopened). If status is still **In Progress** and
+   > `gh` confirms `MERGED`, proceed to transition and record `reviewed_this_run: true`.
+
+3. **Discover linked fix PR(s)** (try in order; verify every URL with `gh`):
+   - MCP `get_issue` — development / `git_pull_requests` URLs
+   - MCP issue comments — `https://github.com/.../pull/N` from agent-signed comments
+     (`server-foundation-agent` footer)
+   - If no URL, search merged PRs by issue key:
+     ```bash
+     gh pr list --repo <org/repo> --state merged \
+       --search "<KEY> in:title" \
+       --json number,url,state,mergedAt,title
+     ```
+     Try SF repos from triage `Relevant Repo` comment, `git_pull_requests`, or
+     `docs/repos.md` until a merged PR is found or all candidates are exhausted.
+
+4. **Verify merge** — `gh pr view <url> --json state,mergedAt,url,title` — proceed
+   **only** when `state` is `MERGED`.
+
+5. **Record then transition (order mandatory):**
+   - **First** append to `pr_merge_review.json`:
+     ```json
+     {
+       "issue_key": "ACM-12345",
+       "action": "review_merged_pr",
+       "reviewed_this_run": true,
+       "pr_url": "https://github.com/stolostron/ocm/pull/123",
+       "pr_state": "MERGED",
+       "merged_at": "2026-06-22T20:19:32Z",
+       "notes": "ocm#123 merged — fix for hosting-cluster-name annotation"
+     }
+     ```
+   - MCP `add_comment` (wiki markup):
+     - `Bug Fix: PR merged`
+     - Merged PR URL and `mergedAt`
+     - One-line fix summary (repo, what changed)
+     - Footer `_— server-foundation-agent_`
+   - MCP `transition_issue` to **Review** (transition name may be `Request Review` or
+     `Review` per `docs/jira/workflows.md`). If transition fails, record
+     `action: failed` with error; do **not** retry blindly.
+   - On success, ensure the row has `reviewed_this_run: true`.
+
+`action` values: `review_merged_pr`, `skipped_no_pr`, `skipped_not_merged`,
+`skipped_already_review`, `failed`.
+
+**Guardrails:**
+
+- Transition **only** when `gh` confirms `MERGED` for a PR linked to this issue
+- Do **not** transition on open/draft PRs or unmerged closed PRs
+- Do **not** transition issues already in **Review** or later
+- Do **not** use Jira `git_pull_requests` without verifying with `gh`
 
 ## Phase 1: Collect new bugs
 
@@ -199,6 +284,8 @@ Skip if `SLACK_WEBHOOK_URL` is unset — log warning in final summary.
 
 Report:
 
+- **PR merge → Review:** issues checked, transitioned to Review this run (from
+  `pr_merge_review.json` where `reviewed_this_run: true`), skipped, failed
 - Bugs found / analyzed / skipped (previously analyzed)
 - Counts by `analysis_status` and draft PRs created
 - Slack, Jira comment, and **`agent-triaged` label** status
@@ -208,6 +295,7 @@ Report:
 
 | Text | Effect |
 |------|--------|
+| `SKIP_PR_MERGE_REVIEW` | Skip Phase 0 (no merged-PR → Review transitions) |
 | `SKIP_DEDUP` | Analyze all New bugs (ignore prior comments) |
 | `ENABLE_AUTO_FIX` | Run Phase 2.5 draft PRs for eligible bugs (off by default) |
 | `SKIP_SLACK` | Skip Phase 4 |
@@ -216,6 +304,7 @@ Report:
 
 - Ask the user for confirmation (automated mode)
 - Use Jira CLI or curl for search/comment (except script fallbacks)
-- Modify issues beyond triage comments and the `agent-triaged` label (no status transitions)
+- Transition Jira status except Phase 0 (**Review** when `gh` confirms PR **MERGED**)
+- Change status or labels in Phases 3.5+ beyond triage comments and `agent-triaged`
 - Run Phase 2.5 auto-fix unless `ENABLE_AUTO_FIX` is set (default is skip)
 - Mark draft PRs ready for review or merge them

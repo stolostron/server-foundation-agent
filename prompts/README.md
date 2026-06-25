@@ -9,11 +9,18 @@ agent needs in a single injected file per run.
 
 ## Jira automation model
 
+**Developer guides:**
+
+- [Automated bug fix — developer guide](../docs/automated-bug-fix-developer-guide.md)
+  — human gates, labels, schedules, and end-to-end flow from New bug to merged PR.
+- [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
+  — ProsSec vulnerability issues, tracking tasks, dependency PRs, auto-close rules.
+
 Two-stage SF Jira automation:
 
 ![SF Jira automation model](../docs/assets/jira-automation-model.png)
 
-- **[daily-bug-triage.md](daily-bug-triage.md)**: triage only; auto-fix stays **off** unless `ENABLE_AUTO_FIX` is set (unchanged).
+- **[daily-bug-triage.md](daily-bug-triage.md)**: triage New bugs; merged fix PRs on In Progress bugs → **Review** (Phase 0). Auto-fix stays **off** unless `ENABLE_AUTO_FIX` is set.
 - **[jira-pipeline.md](jira-pipeline.md)**: the **only** scheduled auto-fix path; runs only when a human has added `issue-for-agent` after triage.
 
 ### Details
@@ -67,6 +74,9 @@ creates tracking tasks via `format-cve-tracking-task.py`, runs deep branch impac
 analysis, posts Jira comments, opens **draft PRs** for fixable CVEs, and **closes**
 vulnerability issues classified as Not Applicable. Skill:
 `.claude/skills/sfa-cve-analysis/`.
+
+**Developer guide:** [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
+— human gates, Jira issue types, PR grooming, auto-close rules, and troubleshooting.
 
 ## Conventions
 

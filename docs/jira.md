@@ -21,7 +21,9 @@ Load these on-demand based on the task at hand:
 | [JQL Reference](jira/jql-reference.md) | `docs/jira/jql-reference.md` | Building search queries, JQL syntax and functions |
 | [API Reference](jira/api-reference.md) | `docs/jira/api-reference.md` | REST API endpoints, authentication, curl examples |
 | [Templates](jira/templates.md) | `docs/jira/templates.md` | Issue creation templates (Bug, Epic, Story, Task, Vulnerability) |
-| [Agent automation](../prompts/README.md#jira-automation-model) | `prompts/README.md` | Scheduled triage + fix pipeline, labels, grooming |
+| [Automated bug fix (developer guide)](automated-bug-fix-developer-guide.md) | `docs/automated-bug-fix-developer-guide.md` | End-to-end Jira → draft PR → merge flow; human gates and labels |
+| [Automated CVE fix (developer guide)](automated-cve-fix-developer-guide.md) | `docs/automated-cve-fix-developer-guide.md` | ProsSec CVE flow: tracking tasks, analysis, draft PRs, auto-close |
+| [Agent automation](../prompts/README.md#jira-automation-model) | `prompts/README.md` | Scheduled triage + fix pipeline, labels, grooming (operator reference) |
 
 ## Bootstrap Sequence
 
@@ -69,6 +71,13 @@ For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-tria
 
 ## Agent automation
 
+**Developer guides:**
+
+- [Automated bug fix](automated-bug-fix-developer-guide.md) — end-to-end bug flow,
+  human gates, labels, schedules, and troubleshooting.
+- [Automated CVE fix](automated-cve-fix-developer-guide.md) — ProsSec vulnerability
+  issues, tracking tasks, dependency PRs, and auto-close rules.
+
 Two-stage SF Jira automation:
 
 ![SF Jira automation model](assets/jira-automation-model.png)
@@ -76,7 +85,7 @@ Two-stage SF Jira automation:
 - **[daily-bug-triage](../workflows/daily-bug-triage.md)** / [prompt](../prompts/daily-bug-triage.md): triage only; auto-fix stays **off** unless `ENABLE_AUTO_FIX` is set.
 - **[jira-pipeline](../prompts/jira-pipeline.md)**: the **only** scheduled auto-fix path; runs only when a human has added `issue-for-agent` after triage. On-demand single issue: [jira-solve](../prompts/jira-solve.md).
 
-Full details: [prompts/README.md](../prompts/README.md#jira-automation-model).
+Operator details: [prompts/README.md](../prompts/README.md#jira-automation-model).
 
 ### Human PR gate
 

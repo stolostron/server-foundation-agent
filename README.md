@@ -45,6 +45,8 @@ All detailed docs live under `docs/` and **MUST** be linked here. When adding or
 | Document | Description |
 |----------|-------------|
 | [docs/jira.md](docs/jira.md) | Jira integration index (links to reference files under `docs/jira/`) |
+| [docs/automated-bug-fix-developer-guide.md](docs/automated-bug-fix-developer-guide.md) | **Developer guide:** automated bug triage → fix → PR → merge; human gates and labels |
+| [docs/automated-cve-fix-developer-guide.md](docs/automated-cve-fix-developer-guide.md) | **Developer guide:** ProsSec CVE analysis → draft PR → merge → auto-close; human gates |
 | [docs/jira/](docs/jira/) | Jira reference: custom fields, workflows, formatting, JQL, API, templates |
 
 **Team** — load when looking up people, ownership, or routing issues:

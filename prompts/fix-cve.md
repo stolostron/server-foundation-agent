@@ -5,6 +5,9 @@ tracking tasks, run deep multi-branch impact analysis, post findings to Jira, op
 **draft PRs** for fixable CVEs, and **close** vulnerability issues classified as
 Not Applicable.
 
+**Developer guide:** [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
+— human gates, Jira issue types, PR grooming, auto-close rules, and troubleshooting.
+
 Designed for **non-interactive** scheduled or on-demand runs (cron or
 `instruction_prompt: CVE-YYYY-NNNNN`). Skill reference:
 `.claude/skills/sfa-cve-analysis/SKILL.md`. PR patterns: `prompts/jira-solve.md`.
