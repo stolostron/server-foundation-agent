@@ -45,6 +45,7 @@ Before running any `go mod vendor`:
 
 ```bash
 test -d vendor   # on the checkout of the *base* branch / start of the fix worktree
+# Or at a ref: git cat-file -e origin/<branch>:vendor
 ```
 
 | Result | Action |
@@ -217,8 +218,20 @@ If `go build` fails, it is usually because:
 ### Step 6C: Verify no source code changes
 
 ```bash
-# Should return empty — only go.mod, go.sum, and vendor/ (if already vendored) should change
-git diff --name-only | grep -v '^vendor/' | grep -v '^go\.\(mod\|sum\)$'
+BASE=origin/<branch>   # e.g. origin/release-2.13 — the CVE fix target branch
+
+# Reject PRs that introduce vendor/ when the base branch had none
+base_has_vendor=false
+git cat-file -e "$BASE:vendor" 2>/dev/null && base_has_vendor=true
+pr_touches_vendor=false
+git diff --name-only "$BASE"...HEAD | grep -q '^vendor/' && pr_touches_vendor=true
+if [ "$pr_touches_vendor" = true ] && [ "$base_has_vendor" = false ]; then
+  echo "ERROR: PR introduces vendor/ but base branch has no vendor/" >&2
+  exit 1
+fi
+
+# Should return empty — only go.mod, go.sum, and vendor/ (if base was vendored) may change
+git diff --name-only "$BASE"...HEAD | grep -v '^vendor/' | grep -v '^go\.\(mod\|sum\)$'
 ```
 
 If any `.go` files outside `vendor/` are changed, something is wrong. The replace strategy should require **zero source code changes**.
