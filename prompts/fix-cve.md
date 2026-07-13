@@ -551,7 +551,14 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
    Example: `--base backplane-2.8` → branch `cve-CVE-2026-39821-backplane-2-8`
 4. **Apply minimal fix** per `solutions/older-branch-dep-upgrade.md`:
    - Prefer `go get <module>@<fix-version>` (and `go mod tidy`)
-   - Run `go mod vendor` when the repo vendors dependencies
+   - **Vendor policy (hard rule):** run `go mod vendor` **only if** `vendor/`
+     already exists on the base branch (`test -d vendor`). If there is no
+     `vendor/` directory, **do not** create one — leave the PR as
+     `go.mod`/`go.sum` only (Mintmaker-style). Introducing `vendor/` into a
+     non-vendored repo breaks hermetic Konflux builds when
+     `Dockerfile.rhtap` does `rm -fr vendor && go mod vendor` (cachi2 skips
+     gomod prefetch when `vendor/` is present; see ACM-37377 /
+     cluster-permission#284).
    - Avoid OCM dependency tier jumps; use `replace` only when the SOP requires it
 5. **Verify** in the worktree (sequential, allow ≥ 5 min):
    ```bash
