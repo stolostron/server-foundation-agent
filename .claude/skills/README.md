@@ -27,6 +27,7 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-bug-reproduce](sfa-bug-reproduce/SKILL.md) | Orchestrate full bug reproduction: provision cluster, test, post results | On demand |
 | [sfa-cve-analysis](sfa-cve-analysis/SKILL.md) | Monitor CVE issues, group by CVE, create tracking tasks, impact analysis across branches | On demand |
 | [sfa-repo-architecture](sfa-repo-architecture/SKILL.md) | Generate architectural overview of upstream OCM-io vs downstream stolostron repos (Mermaid diagrams) | On demand |
+| [sfa-cluster-proxy-backplane-sync](sfa-cluster-proxy-backplane-sync/SKILL.md) | Sync cluster-proxy-addon Helm chart templates and CRDs from stolostron/cluster-proxy into stolostron/backplane-operator with ACM-specific transformations | On demand |
 
 ## Adding a New Skill
 
