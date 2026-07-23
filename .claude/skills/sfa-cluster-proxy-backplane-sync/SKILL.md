@@ -93,6 +93,14 @@ The struct lives in `pkg/rendering/renderer.go`. Key mappings:
 | `manager-deployment.yaml` | `manager-deployment.yaml` | Copy + global subs + ACM blocks + arg overrides |
 | `user-deployment.yaml` | `user-deployment.yaml` | Copy + global subs + ACM blocks + arg overrides |
 
+### NetworkPolicy Templates (upstream exists; ACM replaces toggle path and podSelector label)
+
+| Upstream File | Backplane File | Sync Method |
+|---|---|---|
+| `cluster-proxy-addon-manager-networkpolicy.yaml` | `cluster-proxy-addon-manager-networkpolicy.yaml` | Copy + toggle path sub + podSelector label override |
+| `cluster-proxy-addon-user-networkpolicy.yaml` | `cluster-proxy-addon-user-networkpolicy.yaml` | Copy + toggle path sub |
+| `cluster-proxy-proxy-server-networkpolicy.yaml` | `cluster-proxy-proxy-server-networkpolicy.yaml` | Copy + toggle path sub |
+
 ### Upstream Files Skipped (managed at higher level by cluster-manager)
 
 | File | Reason |
@@ -156,6 +164,7 @@ MUST have a YAML comment in the output template explaining the override.
 |---|---|---|
 | `--enable-kube-api-proxy={{ .Values.enableKubeApiProxy }}` | Keep as-is -- `EnableKubeApiProxy` is in Go struct, set to `false` | `# ACM override: upstream default true. ACM sets false via EnableKubeApiProxy in renderer.go (commit bc36de88, Jan 2023).` |
 | `--enable-service-proxy={{ .Values.enableServiceProxy }}` | Keep as-is -- `EnableServiceProxy` is in Go struct, set to `true` | `# ACM override: upstream default false. ACM sets true via EnableServiceProxy in renderer.go (commit efb29e7b, Nov 2025).` |
+| `--enable-network-policies={{ .Values.networkPolicies.enabled }}` | `--enable-network-policies={{ .Values.global.networkPolicies.enabled }}` | `# ACM override: upstream uses .Values.networkPolicies.enabled; backplane uses .Values.global.networkPolicies.enabled (same value, different path). Controls spoke-side proxy-agent NetworkPolicy deployment.` |
 | `--agent-install-namespace={{ .Values.spokeAddonNamespace }}` | `--agent-install-namespace=open-cluster-management-agent-addon` | `# ACM override: upstream default "open-cluster-management-cluster-proxy".` |
 | `--image-pull-policy={{ .Values.proxyServer.imagePullPolicy }}` | *(remove arg entirely)* | `# ACM: --image-pull-policy arg removed. Not needed in ACM.` |
 
@@ -448,7 +457,31 @@ and the value can be changed from Go code if ever needed. Add comment:
   {{- end }}
 ```
 
-### Rule 10: `user-deployment.yaml` -- Deprecated Field
+### Rule 10: NetworkPolicy Templates -- Toggle Path and PodSelector
+
+The three networkpolicy templates use `{{ .Values.networkPolicies.enabled }}` in upstream.
+Backplane uses `{{ .Values.global.networkPolicies.enabled }}` (same value from `NetworkPoliciesValue`
+in the Go struct, set from `MCE spec.networkPolicies.enabled` in `injectValuesOverrides()`).
+
+**Substitutions for all three NP files:**
+
+| Upstream Pattern | Backplane Replacement | Rationale |
+|---|---|---|
+| `{{ .Values.networkPolicies.enabled }}` | `{{ .Values.global.networkPolicies.enabled }}` | NP toggle lives under `global.networkPolicies.enabled` in the backplane Values struct |
+| `namespace: {{ .Release.Namespace }}` | *(remove)* | Backplane rendering engine sets namespace via `SetNamespace()` for `NetworkPolicy` kind resources |
+
+**Additional override for `cluster-proxy-addon-manager-networkpolicy.yaml`:**
+
+| Upstream | ACM Override | Comment to add |
+|---|---|---|
+| `component: cluster-proxy-manager` (podSelector) | `component: cluster-proxy-addon-manager` | Upstream and backplane use different component label values. Backplane pods have `cluster-proxy-addon-manager` (historical divergence; `matchLabels` are immutable). The NP podSelector must match actual pod labels or the policy selects no pods. |
+
+The upstream NP files use **port-based peers** (empty `to:`/`from:` entries with explicit port
+lists) for portability across Kubernetes vendors. Do NOT replace with OpenShift-specific
+namespace selectors (`policy-group.network.openshift.io/ingress`, `openshift-dns`) -- the
+upstream approach is intentionally vendor-neutral and should be preserved in the backplane copy.
+
+### Rule 11: `user-deployment.yaml` -- Deprecated Field
 
 Upstream uses the deprecated `serviceAccount:` field.
 ACM uses `serviceAccountName:` (the current field).
@@ -490,7 +523,8 @@ After syncing, verify every item before opening a PR:
 
    Known valid paths:
    - `global.namespace`, `global.pullPolicy`, `global.pullSecret`,
-     `global.imageOverrides.cluster_proxy`, `global.deployOnOCP`
+     `global.imageOverrides.cluster_proxy`, `global.deployOnOCP`,
+     `global.networkPolicies.enabled`
    - `hubconfig.replicaCount`, `hubconfig.nodeSelector`, `hubconfig.tolerations`,
      `hubconfig.proxyConfigs`, `hubconfig.ocpVersion`, `hubconfig.clusterIngressDomain`
    - `enableServiceProxy`, `enableKubeApiProxy`, `enableImpersonation`
@@ -558,7 +592,9 @@ List files in `<cluster-proxy>/charts/cluster-proxy/templates/`:
 ls <cluster-proxy>/charts/cluster-proxy/templates/
 ```
 
-Compare against the File Inventory table in this document.
+Compare against the File Inventory table in this document. Note that the three
+`*-networkpolicy.yaml` files are expected upstream files -- they are in the
+NetworkPolicy Templates table, not the Upstream Files Skipped table.
 
 **If any new file exists or an expected file is missing: STOP. Do not proceed. Update the
 File Inventory and transformation rules in this skill first.**
