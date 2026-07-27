@@ -20,7 +20,7 @@ This skill clones a GitHub repository (as a bare repo) and creates a git worktre
 ### 2. New Branch Mode — Start new development
 
 In **local mode** (default): uses the fork workflow — ensures fork exists, branches from upstream, pushes to fork.
-In **autonomous mode** (`GH_APP_ID` + `GH_APP_INSTALLATION_ID` set): pushes directly to upstream with `sfa/` branch prefix.
+In **autonomous mode**: pushes directly to upstream with `sfa/` branch prefix. Detected when `GH_APP_ID` + `GH_APP_INSTALLATION_ID` are set, or when `GITHUB_TOKEN` is a GitHub App Installation Access Token (cannot call `/user` or fork). Fork failures also fall back to autonomous mode.
 
 ```bash
 # Branch from main (default)
@@ -58,7 +58,12 @@ The `--new` mode automatically selects the right workflow based on the execution
 
 ### Autonomous Mode (remote/self-running)
 
-Detected when `GH_APP_ID` and `GH_APP_INSTALLATION_ID` environment variables are set. The agent pushes directly to the upstream repo.
+Detected when:
+- `GH_APP_ID` and `GH_APP_INSTALLATION_ID` are set (Swarmer injects these for GitHub App sessions), **or**
+- `GITHUB_TOKEN` is a GitHub App Installation Access Token (`gh api user` returns no login), **or**
+- the fork workflow fails with 403 / "Resource not accessible by integration"
+
+The agent pushes directly to the upstream repo.
 
 1. Bare clone from **upstream** (reuse if exists)
 2. Auto-prefix branch name with `sfa/` (e.g., `upgrade-anp` → `sfa/upgrade-anp`)

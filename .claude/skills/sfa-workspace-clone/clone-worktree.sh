@@ -25,10 +25,26 @@
 set -u
 
 # Detect execution mode: autonomous (self-running on a remote machine) vs local (human-collaborative).
-# When GH_APP_ID and GH_APP_INSTALLATION_ID are set, the agent runs autonomously
-# and pushes directly to upstream repos with sfa/ branch prefix instead of forking.
+# Autonomous mode pushes directly to upstream with an sfa/ branch prefix (no fork).
+# Triggers:
+#   1. GH_APP_ID + GH_APP_INSTALLATION_ID are set (explicit App session), OR
+#   2. GITHUB_TOKEN is an Installation Access Token (cannot call /user or fork)
+_is_github_app_iat() {
+    # Installation tokens return 403 on GET /user; PATs and user tokens return a login.
+    [ -z "${GITHUB_TOKEN:-}" ] && return 1
+    local login
+    login=$(GH_TOKEN="${GITHUB_TOKEN}" gh api user -q '.login' 2>/dev/null) || true
+    [ -z "$login" ]
+}
+
 is_autonomous_mode() {
-    [ -n "${GH_APP_ID:-}" ] && [ -n "${GH_APP_INSTALLATION_ID:-}" ]
+    if [ -n "${GH_APP_ID:-}" ] && [ -n "${GH_APP_INSTALLATION_ID:-}" ]; then
+        return 0
+    fi
+    if _is_github_app_iat; then
+        return 0
+    fi
+    return 1
 }
 
 # Colors for output
@@ -333,18 +349,24 @@ create_worktree_new() {
         echo "$abs_path"
     else
         # --- Local mode: fork workflow ---
+        # Installation tokens cannot fork; if fork/user lookup fails, fall back
+        # to autonomous direct-push (same path as is_autonomous_mode).
         log_info "Local mode — using fork workflow"
 
-        # Ensure fork exists
         log_info "Ensuring fork exists for ${repo_full}..."
-        gh repo fork "${repo_full}" --clone=false 2>&1 | grep -v "already exists" >&2 || true
+        local fork_out
+        fork_out=$(gh repo fork "${repo_full}" --clone=false 2>&1) || true
+        echo "$fork_out" | grep -v "already exists" >&2 || true
 
-        # Get current user's GitHub username
         local gh_user
-        gh_user=$(gh api user -q '.login')
-        if [ -z "$gh_user" ]; then
-            log_error "Failed to get GitHub username"
-            exit 1
+        gh_user=$(gh api user -q '.login' 2>/dev/null) || true
+        if [ -z "$gh_user" ] || echo "$fork_out" | grep -qiE '403|Resource not accessible|not accessible by integration'; then
+            log_warn "Fork workflow unavailable (GitHub App IAT or missing user) — falling back to direct upstream push"
+            # Re-enter autonomous path by setting sentinel env and recursing once.
+            export GH_APP_ID="${GH_APP_ID:-iat}"
+            export GH_APP_INSTALLATION_ID="${GH_APP_INSTALLATION_ID:-iat}"
+            create_worktree_new "$repo_full" "$branch_name" "$base_branch" "$base_dir"
+            return
         fi
         log_info "GitHub user: ${gh_user}"
 
