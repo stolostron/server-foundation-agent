@@ -22,6 +22,30 @@ else
   PAYLOAD_JSON=$(cat "$PAYLOAD_FILE")
 fi
 
+# Incoming Webhooks often reject Block Kit payloads that contain user-group
+# mentions (<!subteam^ID|label>) with HTTP 400 invalid_blocks. Strip them and
+# keep a plain-text team label so the rest of the message (PR links) still posts.
+strip_subteam_mentions() {
+  local payload="$1"
+  echo "$payload" | jq -c '
+    def scrub:
+      gsub("<!subteam\\^[A-Z0-9]+(\\|[^>]*)?>"; "*Server Foundation*");
+    . as $root
+    | if type == "object" then
+        (if .text then .text |= scrub else . end)
+        | (if .blocks then
+             .blocks |= map(
+               if .text.text then .text.text |= scrub else . end
+               | if .elements then
+                   .elements |= map(if .text then .text |= scrub else . end)
+                 else . end
+             )
+           else . end)
+      else .
+      end
+  '
+}
+
 send_payload() {
   local payload="$1"
   local response http_code body
@@ -46,6 +70,26 @@ send_payload() {
       -d "$payload" "$SLACK_WEBHOOK_URL" > /dev/null
     echo "Retry sent"
     return 0
+  elif [ "$http_code" = "400" ] && echo "$body" | grep -qi 'invalid_blocks'; then
+    # Common with Incoming Webhooks + <!subteam^...> — retry without mentions
+    # so clickable Block Kit PR links still reach the channel.
+    if echo "$payload" | grep -q '<!subteam'; then
+      echo "WARN: Slack invalid_blocks — retrying without <!subteam^...> mentions" >&2
+      local scrubbed
+      scrubbed=$(strip_subteam_mentions "$payload")
+      response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H 'Content-type: application/json; charset=utf-8' \
+        -d "$scrubbed" \
+        "$SLACK_WEBHOOK_URL")
+      http_code=$(echo "$response" | tail -1)
+      body=$(echo "$response" | sed '$d')
+      if [ "$http_code" = "200" ] && [ "$body" = "ok" ]; then
+        echo "Message sent successfully (after stripping subteam mentions)"
+        return 0
+      fi
+    fi
+    echo "ERROR: Slack returned HTTP $http_code: $body" >&2
+    return 1
   else
     echo "ERROR: Slack returned HTTP $http_code: $body" >&2
     return 1

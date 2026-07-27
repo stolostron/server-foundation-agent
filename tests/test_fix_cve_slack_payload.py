@@ -195,6 +195,99 @@ def test_format_pr_line_validates_pr_url():
     assert "<https://github.com/stolostron/ocm/pull/767|ocm #767>" in line
 
 
+def test_append_pr_section_groups_by_cve_with_links():
+    items = [
+        {
+            "pr_url": "https://github.com/stolostron/ocm/pull/797",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.8",
+            "keys": ["ACM-37693"],
+            "cve_ids": ["CVE-2026-27145"],
+            "pr_number": 797,
+        },
+        {
+            "pr_url": "https://github.com/stolostron/ocm/pull/799",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.11",
+            "keys": ["ACM-37541"],
+            "cve_ids": ["CVE-2026-33814"],
+            "pr_number": 799,
+        },
+    ]
+    blocks: list[dict] = []
+    _mod._append_pr_section(blocks, "Draft — mark Ready for review", items)
+    assert blocks[0]["type"] == "section"
+    text = blocks[0]["text"]["text"]
+    assert "*CVE-2026-27145*" in text
+    assert "*CVE-2026-33814*" in text
+    assert "<https://github.com/stolostron/ocm/pull/797|ocm #797>" in text
+    assert "<https://github.com/stolostron/ocm/pull/799|ocm #799>" in text
+    assert blocks[1]["type"] == "divider"
+
+
+def test_fallback_notification_text_includes_full_pr_urls():
+    buckets = {
+        "draft": [
+            {
+                "pr_url": "https://github.com/stolostron/ocm/pull/797",
+                "cve_ids": ["CVE-2026-27145"],
+            }
+        ],
+        "awaiting_approval": [],
+        "merged": [],
+        "closed": [],
+    }
+    text = _mod._fallback_notification_text(
+        today="2026-07-27",
+        open_pr_count=1,
+        merged_count=0,
+        closed_merged_count=0,
+        closed_na_count=0,
+        cves_processed=1,
+        buckets=buckets,
+    )
+    assert "https://github.com/stolostron/ocm/pull/797" in text
+    assert "CVE-2026-27145" in text
+    assert "Draft PRs:" in text
+
+
+def test_aggregate_prs_collects_cve_ids():
+    remediation = [
+        {
+            "action": "pr_opened",
+            "pr_url": "https://github.com/stolostron/ocm/pull/797",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.8",
+            "issue_key": "ACM-37693",
+            "cve_id": "CVE-2026-27145",
+            "pr_state": "OPEN",
+            "is_draft": True,
+        },
+        {
+            "action": "pr_opened",
+            "pr_url": "https://github.com/stolostron/ocm/pull/797",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.8",
+            "issue_key": "ACM-37686",
+            "cve_id": "CVE-2026-27145",
+            "pr_state": "OPEN",
+            "is_draft": True,
+        },
+    ]
+    with patch.object(_mod, "pr_state_from_row") as mock_from_row:
+        mock_from_row.return_value = _state(
+            "https://github.com/stolostron/ocm/pull/797",
+            "stolostron/ocm",
+            797,
+            "OPEN",
+            True,
+        )
+        prs = _mod._aggregate_prs(remediation)
+    entry = prs["https://github.com/stolostron/ocm/pull/797"]
+    assert entry["cve_ids"] == ["CVE-2026-27145"]
+    assert set(entry["keys"]) == {"ACM-37693", "ACM-37686"}
+
+
 def test_format_pr_line_invalid_url_falls_back_to_plain_text():
     line = _mod._format_pr_line(
         "https://evil.example|<!channel>",

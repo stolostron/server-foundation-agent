@@ -831,9 +831,17 @@ bash .claude/skills/sfa-slack-notify/send_to_slack.sh \
   .output/cve-analysis/slack_payload.json
 ```
 
+**Required behavior:**
+- Always send the JSON produced by `generate_slack_payload.py` via `send_to_slack.sh`
+  (or Slack MCP `send_payload` with that same JSON). The payload already includes
+  clickable Block Kit PR links (`<https://github.com/.../pull/N|repo #N>`).
+- **Do not** invent a hand-crafted plain-text digest (e.g. `ocm#797, ocm#798` without
+  URLs). That is what made the previous Slack post unusable.
+- If send fails, record `Slack: failed (<reason>)` in the final summary. Do **not**
+  curl a custom fallback message. `send_to_slack.sh` already retries after stripping
+  `<!subteam^...>` mentions when Slack returns `invalid_blocks`.
 - If neither Slack MCP nor `SLACK_WEBHOOK_URL` is available → skip Phase 7 and log
   `Slack: skipped (no webhook)` in the final summary
-- If send fails → record error in final summary; do not fail the whole run
 - Record `Slack: sent` or `Slack: failed (<reason>)` in the session output
 
 ## Final summary
@@ -880,6 +888,8 @@ Report in session output:
   (b) linked fix PR is **MERGED** per `gh` (§6.5), or (c) toolchain verify with
   `go version -m` ≥ `min_go` + Fix Version (§6.0 / `sfa-cve-toolchain-verify`)
 - Open more than one PR per `(repo, branch, CVE)` per run
+- Hand-craft a Slack digest that omits clickable `https://github.com/.../pull/N` URLs
+  (always use `generate_slack_payload.py` + `send_to_slack.sh` / MCP `send_payload`)
 - Cascade major dependency upgrades on older branches (follow the older-branch SOP)
 - Clone or write analysis artifacts under `/tmp` (OpenCode rejects `external_directory (/tmp/*)`);
   use `.output/cve-analysis/` only

@@ -6,8 +6,13 @@ import datetime
 import re
 from typing import Optional
 
-# Slack user group mention for Server Foundation team
+# Slack user group mention for Server Foundation team.
+# Incoming Webhooks often reject this in Block Kit (HTTP 400 invalid_blocks).
+# Prefer SF_GROUP_LABEL in webhook payloads; keep SF_GROUP_MENTION for MCP
+# send_payload when the app can mention user groups. send_to_slack.sh strips
+# <!subteam^...> and retries automatically on invalid_blocks.
 SF_GROUP_MENTION = "<!subteam^S04N59L7UPR|acm-server-foundation>"
+SF_GROUP_LABEL = "*Server Foundation*"
 
 JIRA_BROWSE_BASE = "https://redhat.atlassian.net/browse"
 
@@ -65,9 +70,32 @@ def divider_block() -> dict:
     return {"type": "divider"}
 
 
+SECTION_TEXT_LIMIT = 3000
+
+
 def section_mrkdwn(text: str) -> dict:
-    """Build a Slack section block with mrkdwn text."""
+    """Build a Slack section block with mrkdwn text (truncated to Slack's limit)."""
+    if len(text) > SECTION_TEXT_LIMIT:
+        text = text[: SECTION_TEXT_LIMIT - 1] + "…"
     return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
+
+def section_mrkdwn_chunks(text: str, *, limit: int = SECTION_TEXT_LIMIT) -> list[dict]:
+    """Split long mrkdwn into multiple section blocks at line boundaries."""
+    if len(text) <= limit:
+        return [section_mrkdwn(text)]
+    chunks: list[dict] = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(section_mrkdwn(remaining))
+            break
+        cut = remaining.rfind("\n", 0, limit)
+        if cut < limit // 2:
+            cut = limit
+        chunks.append(section_mrkdwn(remaining[:cut]))
+        remaining = remaining[cut:].lstrip("\n")
+    return chunks
 
 
 def agent_footer_block(date: Optional[str] = None) -> dict:

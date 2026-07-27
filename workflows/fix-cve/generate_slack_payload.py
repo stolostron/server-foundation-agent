@@ -29,12 +29,13 @@ from gh_pr_state import (  # noqa: E402
     pr_state_from_row,
 )
 from slack_blocks import (  # noqa: E402
-    SF_GROUP_MENTION,
+    SF_GROUP_LABEL,
     agent_footer_block,
     escape_mrkdwn,
     header_block,
     linkify_issue_keys,
     section_mrkdwn,
+    section_mrkdwn_chunks,
     today_iso,
 )
 
@@ -102,6 +103,7 @@ def _aggregate_prs(remediation: list[dict]) -> dict[str, dict[str, Any]]:
                 "repo": row.get("repo", "") or (state.repo if state else ""),
                 "branch": row.get("branch", ""),
                 "keys": [],
+                "cve_ids": [],
                 "bucket": state.bucket if state else "draft",
                 "pr_number": state.number if state else None,
             },
@@ -114,6 +116,11 @@ def _aggregate_prs(remediation: list[dict]) -> dict[str, dict[str, Any]]:
         key = row.get("issue_key")
         if key and key not in entry["keys"]:
             entry["keys"].append(key)
+        cve = row.get("cve_id")
+        if cve and cve not in entry["cve_ids"]:
+            entry["cve_ids"].append(cve)
+        if not entry.get("branch") and row.get("branch"):
+            entry["branch"] = row["branch"]
     return prs
 
 
@@ -130,8 +137,32 @@ def _bucket_prs(prs: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, Any]
             bucket = "draft"
         buckets[bucket].append(entry)
     for items in buckets.values():
-        items.sort(key=lambda p: (p.get("repo", ""), p.get("branch", "")))
+        items.sort(
+            key=lambda p: (
+                (p.get("cve_ids") or [""])[0],
+                p.get("repo", ""),
+                p.get("branch", ""),
+            )
+        )
     return buckets
+
+
+def _primary_cve(entry: dict[str, Any]) -> str:
+    cves = entry.get("cve_ids") or []
+    return cves[0] if cves else ""
+
+
+def _group_by_cve(items: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Preserve CVE order from sorted items; empty CVE last."""
+    order: list[str] = []
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for entry in items:
+        cve = _primary_cve(entry) or "Unspecified CVE"
+        if cve not in groups:
+            order.append(cve)
+            groups[cve] = []
+        groups[cve].append(entry)
+    return [(cve, groups[cve]) for cve in order]
 
 
 def _derive_follow_up_lines(buckets: dict[str, list[dict[str, Any]]]) -> list[str]:
@@ -228,16 +259,22 @@ def _aggregate_closed_merged(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         url = row.get("pr_url") or ""
         if not url:
             key = row.get("issue_key")
-            by_url.setdefault(
+            entry = by_url.setdefault(
                 f"no-pr:{key}",
                 {
                     "pr_url": "",
                     "repo": row.get("repo", ""),
                     "branch": row.get("branch", ""),
                     "keys": [],
+                    "cve_ids": [],
                     "pr_number": None,
                 },
-            )["keys"].append(key)
+            )
+            if key and key not in entry["keys"]:
+                entry["keys"].append(key)
+            cve = row.get("cve_id")
+            if cve and cve not in entry["cve_ids"]:
+                entry["cve_ids"].append(cve)
             continue
         parsed = parse_pr_url(url)
         num = parsed[1] if parsed else None
@@ -249,6 +286,7 @@ def _aggregate_closed_merged(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "repo": repo,
                 "branch": row.get("branch", ""),
                 "keys": [],
+                "cve_ids": [],
                 "pr_number": num,
             },
         )
@@ -261,8 +299,17 @@ def _aggregate_closed_merged(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         key = row.get("issue_key")
         if key and key not in entry["keys"]:
             entry["keys"].append(key)
+        cve = row.get("cve_id")
+        if cve and cve not in entry["cve_ids"]:
+            entry["cve_ids"].append(cve)
     items = list(by_url.values())
-    items.sort(key=lambda p: (p.get("repo", ""), p.get("branch", "")))
+    items.sort(
+        key=lambda p: (
+            (p.get("cve_ids") or [""])[0],
+            p.get("repo", ""),
+            p.get("branch", ""),
+        )
+    )
     return items
 
 
@@ -377,18 +424,64 @@ def _append_pr_section(
 ) -> None:
     if not items:
         return
-    lines = [
-        _format_pr_line(
-            p["pr_url"],
-            p["repo"],
-            p["branch"],
-            p["keys"],
-            pr_number=p.get("pr_number"),
-        )
-        for p in items
-    ]
-    blocks.append(section_mrkdwn(f"*{title}* ({len(items)})\n" + "\n".join(lines)))
+    lines: list[str] = [f"*{title}* ({len(items)})"]
+    groups = _group_by_cve(items)
+    show_cve_headers = len(groups) > 1 or (
+        len(groups) == 1 and groups[0][0] != "Unspecified CVE"
+    )
+    for cve, group in groups:
+        if show_cve_headers:
+            lines.append(f"*{escape_mrkdwn(cve)}*")
+        for p in group:
+            lines.append(
+                _format_pr_line(
+                    p["pr_url"],
+                    p["repo"],
+                    p["branch"],
+                    p["keys"],
+                    pr_number=p.get("pr_number"),
+                )
+            )
+    blocks.extend(section_mrkdwn_chunks("\n".join(lines)))
     blocks.append({"type": "divider"})
+
+
+def _fallback_notification_text(
+    *,
+    today: str,
+    open_pr_count: int,
+    merged_count: int,
+    closed_merged_count: int,
+    closed_na_count: int,
+    cves_processed: int,
+    buckets: dict[str, list[dict[str, Any]]],
+    closed_toolchain_count: int = 0,
+) -> str:
+    """Plain-text fallback used when Block Kit fails or for push notifications.
+
+    Always includes full GitHub PR URLs so the message stays actionable even if
+    blocks are dropped (e.g. invalid_blocks from a hand-rolled agent fallback).
+    """
+    lines = [
+        f"SF CVE fix — {today}: {open_pr_count} open PR(s), "
+        f"{merged_count} merged, {closed_merged_count} Jira closed (merged PR), "
+        f"{closed_toolchain_count} closed (toolchain), "
+        f"{closed_na_count} closed N/A, {cves_processed} CVE(s) processed",
+    ]
+    for label, key in (
+        ("Draft PRs", "draft"),
+        ("Ready for review", "awaiting_approval"),
+        ("Merged", "merged"),
+    ):
+        items = buckets.get(key) or []
+        if not items:
+            continue
+        lines.append(f"{label}:")
+        for entry in items:
+            cve = _primary_cve(entry)
+            prefix = f"{cve} " if cve else ""
+            lines.append(f"  {prefix}{entry['pr_url']}")
+    return "\n".join(lines)
 
 
 def main() -> None:
@@ -456,18 +549,24 @@ def main() -> None:
         fallback = f"SF CVE fix — {today}: no active vulnerability issues"
         blocks = [
             header_block(f"SF CVE fix — {today}"),
-            section_mrkdwn(f"{SF_GROUP_MENTION}\n_No active Server Foundation CVE issues._"),
+            section_mrkdwn(
+                f"{SF_GROUP_LABEL}\n_No active Server Foundation CVE issues._"
+            ),
             agent_footer_block(today),
         ]
     else:
-        fallback = (
-            f"SF CVE fix — {today}: {open_pr_count} open PR(s), "
-            f"{merged_count} merged, {closed_merged_count} Jira closed (merged PR), "
-            f"{closed_toolchain_count} closed (toolchain), "
-            f"{closed_na_count} closed N/A, {cves_processed or 0} CVE(s) processed"
+        fallback = _fallback_notification_text(
+            today=today,
+            open_pr_count=open_pr_count,
+            merged_count=merged_count,
+            closed_merged_count=closed_merged_count,
+            closed_na_count=closed_na_count,
+            cves_processed=int(cves_processed or 0),
+            buckets=buckets,
+            closed_toolchain_count=closed_toolchain_count,
         )
         summary_lines = [
-            SF_GROUP_MENTION,
+            SF_GROUP_LABEL,
             f"*CVEs processed:* {cves_processed or 0}",
         ]
         if issue_count is not None:
@@ -520,9 +619,10 @@ def main() -> None:
                     for g in orphan
                     for k in g["keys"]
                 ]
-                blocks.append(
-                    section_mrkdwn(
-                        f"*Closed this run (merged PR, no URL)* ({sum(len(g['keys']) for g in orphan)})\n"
+                blocks.extend(
+                    section_mrkdwn_chunks(
+                        f"*Closed this run (merged PR, no URL)* "
+                        f"({sum(len(g['keys']) for g in orphan)})\n"
                         + "\n".join(orphan_lines)
                     )
                 )
@@ -540,8 +640,8 @@ def main() -> None:
 
         if closed_issues:
             closed_lines = [_format_closed_na_line(row) for row in closed_issues[:20]]
-            blocks.append(
-                section_mrkdwn(
+            blocks.extend(
+                section_mrkdwn_chunks(
                     f"*Closed as Not Applicable* ({closed_na_count})\n"
                     + "\n".join(closed_lines)
                 )
@@ -553,12 +653,12 @@ def main() -> None:
             meta.get("follow_up") if isinstance(meta.get("follow_up"), str) else None,
             pr_lookup,
         )
-        blocks.append(section_mrkdwn(f"*Follow-up*\n\n{follow_up}"))
+        blocks.extend(section_mrkdwn_chunks(f"*Follow-up*\n\n{follow_up}"))
 
         if failures:
             fail_text = "\n".join(f"• {escape_mrkdwn(f)}" for f in failures[:10])
             blocks.append({"type": "divider"})
-            blocks.append(section_mrkdwn(f"*Warnings / failures*\n{fail_text}"))
+            blocks.extend(section_mrkdwn_chunks(f"*Warnings / failures*\n{fail_text}"))
 
         blocks.append(agent_footer_block(today))
 

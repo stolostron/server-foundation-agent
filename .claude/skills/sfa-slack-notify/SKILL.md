@@ -343,6 +343,7 @@ Generate it by extracting the report title and a one-line summary:
 | `SLACK_WEBHOOK_URL` not set | Stop, ask user to set the env var |
 | HTTP 200 + body "ok" | Success |
 | HTTP 400 `invalid_payload` | Log the payload, fix JSON structure, retry |
+| HTTP 400 `invalid_blocks` | `send_to_slack.sh` strips `<!subteam^...>` mentions and retries once (Incoming Webhooks often reject user-group pings). If still failing, fix block structure / length — never replace with a hand-crafted text-only digest that drops PR URLs |
 | HTTP 400 `msg_blocks_too_long` | Content too long — split and retry |
 | HTTP 429 (rate limited) | Sleep for `Retry-After` seconds (default 2s), retry once |
 | HTTP 403 | Webhook revoked or channel restricted — notify user |
