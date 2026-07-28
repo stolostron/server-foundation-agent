@@ -211,7 +211,12 @@ Save to `.output/cve-analysis/cve-meta-{cve_id}.json`.
 
 ### 4.2 Clone and analyze branches
 
-Use temp dir `/tmp/cve-analysis/repos` (or `.output/cve-analysis/repos`).
+**Clone under the sandbox only** — use `.output/cve-analysis/repos/` (create with
+`mkdir -p`). OpenCode rejects `external_directory (/tmp/*)`; never `cd /tmp` or
+`git clone` into `/tmp`.
+
+For writable CVE *fix* worktrees (draft PRs), use `sfa-workspace-clone` → `workspace/`
+instead of this analysis clone tree.
 
 **Repositories** — derive from vulnerability issues for this CVE (via script output
 or pscomponent labels). Common SF repos:
@@ -678,3 +683,5 @@ Report in session output:
   (b) linked fix PR is **MERGED** per `gh` (§6.5)
 - Open more than one PR per `(repo, branch, CVE)` per run
 - Cascade major dependency upgrades on older branches (follow the older-branch SOP)
+- Clone or write analysis artifacts under `/tmp` (OpenCode rejects `external_directory (/tmp/*)`);
+  use `.output/cve-analysis/` only
