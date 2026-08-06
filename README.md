@@ -29,7 +29,7 @@ All detailed docs live under `docs/` and **MUST** be linked here. When adding or
 | [docs/repos.md](docs/repos.md) | SF repo inventory: MCE/ACM repos, deps, installers, QE tests, docs repos, sync management |
 | [SF-REPO-ARCHITECTURE.md](SF-REPO-ARCHITECTURE.md) | **Generated** upstream OCM-io vs downstream stolostron architectural overview with Mermaid diagrams |
 | [docs/network-policy/README.md](docs/network-policy/README.md) | NetworkPolicy docs index (links to inventory and related NP planning) |
-| [docs/network-policy/SF-NETWORK-INVENTORY.md](docs/network-policy/SF-NETWORK-INVENTORY.md) | SF NetworkPolicy inventory: workloads, ports, ingress/egress allow-list |
+| [docs/network-policy/SF-NETWORK-INVENTORY.md](docs/network-policy/SF-NETWORK-INVENTORY.md) | SF NetworkPolicy inventory, shipped policies, and validation |
 | [docs/repo-dependencies.md](docs/repo-dependencies.md) | (Outdated) Repo dependency index — see `SF-REPO-ARCHITECTURE.md` for current info |
 | [docs/repo-deps/](docs/repo-deps/) | (Outdated) Repo deps reference — see `SF-REPO-ARCHITECTURE.md` for current info |
 
