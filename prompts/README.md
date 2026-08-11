@@ -70,10 +70,12 @@ Triage also references helper scripts under `workflows/daily-bug-triage/` and op
 long-form docs in `workflows/daily-bug-triage.md`.
 
 **CVE fix:** `fix-cve.md` groups ProsSec vulnerability issues by CVE,
-creates tracking tasks via `format-cve-tracking-task.py`, runs deep branch impact
-analysis, posts Jira comments, opens **draft PRs** for fixable CVEs, and **closes**
-vulnerability issues classified as Not Applicable. Skill:
-`.claude/skills/sfa-cve-analysis/`.
+**classifies toolchain/stdlib vs module first**, creates tracking tasks via
+`format-cve-tracking-task.py`, runs deep branch impact analysis (module path),
+posts Jira comments, opens **draft PRs** for module CVEs or **Konflux rebuilds** for
+toolchain CVEs, and **closes** vulnerability issues when Not Applicable / verified.
+Skills: `.claude/skills/sfa-cve-analysis/`, `sfa-cve-toolchain/`,
+`sfa-cve-toolchain-verify/`.
 
 **Developer guide:** [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
 — human gates, Jira issue types, PR grooming, auto-close rules, and troubleshooting.

@@ -7,7 +7,7 @@ All external dependencies required for the server-foundation-agent to run at ful
 | Runtime | Min Version | Used By | Notes |
 |---------|-------------|---------|-------|
 | **Bash** | 4.0+ | All skills & workflows | Shell scripts throughout |
-| **Python 3** | 3.6+ | 7 skills, 3 workflows | stdlib only, no pip packages needed |
+| **Python 3** | 3.7+ | skills & workflows | stdlib only, no pip packages needed (`from __future__ import annotations`) |
 | **Go** | 1.24+ | All SF repos (coding agent) | Build, test, vet, mod tidy |
 
 > **No Node.js / JavaScript runtime is required.** All scripts are Bash or Python.
@@ -35,6 +35,7 @@ All Python scripts use standard library only. Modules: `json`, `sys`, `os`, `dat
 | `golangci-lint` | Yes | Most SF repos CI linting | `brew install golangci-lint` |
 | `base64` | Yes | 1 skill (cluster-pools) | Built-in on macOS/Linux |
 | `yq` | Yes | YAML validation (per CLAUDE.md global rules) | `brew install yq` |
+| `skopeo` | Conditional | 1 skill (sfa-cve-toolchain-verify — Konflux image inspect/copy) | `brew install skopeo` |
 
 ### LSP Servers (coding agent)
 
@@ -116,6 +117,8 @@ Different skills connect to **different clusters** — there is no single shared
 | sfa-bug-reproduce | curl, jq, oc, kubectl | JIRA_EMAIL, JIRA_API_TOKEN, KUBECONFIG (user-specified test cluster) | bash, python3 |
 | sfa-cluster-pools | oc, kubectl, jq, aws, hiveutil | `/tmp/kube/collective.kubeconfig` (collective cluster), AWS_* | bash |
 | sfa-cve-analysis | curl, jq, git | JIRA_EMAIL, JIRA_API_TOKEN | bash, python3 |
+| sfa-cve-toolchain | git, gh | GITHUB_TOKEN, Jira MCP | bash, python3 |
+| sfa-cve-toolchain-verify | skopeo, go, gh | GITHUB_TOKEN, Jira MCP | bash, python3 |
 | sfa-github-fetch-prs | gh, jq | GITHUB_TOKEN | bash |
 | sfa-jira-comment | curl, jq | JIRA_EMAIL, JIRA_API_TOKEN | bash |
 | sfa-jira-create | curl, jq | JIRA_EMAIL, JIRA_API_TOKEN | bash |
@@ -147,6 +150,7 @@ Different skills connect to **different clusters** — there is no single shared
 ```bash
 # 1. Install required CLI tools (macOS)
 brew install jq gh yq golangci-lint
+# Optional (toolchain CVE verify): brew install skopeo
 
 # 2. Install Go (https://go.dev/dl/)
 # Verify: go version  # 1.24+ required
@@ -175,7 +179,7 @@ export AWS_ACCESS_KEY_ID="..."
 export AWS_SECRET_ACCESS_KEY="..."
 
 # 9. Verify runtimes
-python3 --version  # 3.6+ required, stdlib only
+python3 --version  # 3.7+ required, stdlib only
 go version         # 1.24+ required
 ```
 

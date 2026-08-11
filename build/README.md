@@ -9,7 +9,7 @@ Container image definition for the server-foundation-agent. This Dockerfile is t
 | **Runtimes** | Bash 5.x, Python 3.x | Python stdlib only, no pip packages |
 | **Go Toolchain** | Go 1.24.x, make, gcc/g++, golangci-lint, gopls | All SF repos are Go — build, test, lint, LSP |
 | **Python LSP** | pylsp | SFA skills/workflows use Python scripts |
-| **CLI Tools** | curl, jq, git, gh, yq, openssl | Core — required for all skills |
+| **CLI Tools** | curl, jq, git, gh, yq, openssl, skopeo | Core — required for skills; skopeo for CVE image verify |
 | **Kubernetes** | kubectl, oc, helm | oc for OpenShift; kubectl for general K8s; helm for charts |
 | **Cloud** | aws CLI v2 | For cluster-pools skill (EC2, ELB, S3) |
 | **Auth** | GitHub App scripts, git credential helper | Transparent auth in autonomous mode |

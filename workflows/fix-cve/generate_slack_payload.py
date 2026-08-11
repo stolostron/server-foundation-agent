@@ -292,6 +292,84 @@ def _format_closed_na_line(row: dict[str, Any]) -> str:
     return f"• {linkify_issue_keys(escape_mrkdwn(key))} — {escape_mrkdwn(note)}"
 
 
+def _format_toolchain_rebuild_line(row: dict[str, Any]) -> str:
+    """One line for a Konflux TRIGGER_BUILD group."""
+    repo = row.get("repo") or "?"
+    branch = row.get("branch") or ""
+    commit_url = row.get("commit_url") or ""
+    commit = row.get("commit") or ""
+    short = commit[:7] if commit else "rebuild"
+    keys = row.get("issue_keys") or []
+    if not keys and row.get("issue_key"):
+        keys = [row["issue_key"]]
+    key_part = ", ".join(str(k) for k in keys[:6])
+    if len(keys) > 6:
+        key_part += f" (+{len(keys) - 6} more)"
+    branch_part = f" `{branch}`" if branch else ""
+    if commit_url:
+        link = f"<{commit_url}|{escape_mrkdwn(short)}>"
+    else:
+        link = escape_mrkdwn(short)
+    return (
+        f"• {escape_mrkdwn(repo)}{branch_part} — {link} — "
+        f"{linkify_issue_keys(escape_mrkdwn(key_part))}"
+    )
+
+
+def _format_toolchain_close_line(row: dict[str, Any]) -> str:
+    key = row.get("issue_key", "?")
+    fix_ver = row.get("fix_version") or ""
+    go_ver = row.get("go_ver") or ""
+    note_bits = []
+    if go_ver:
+        note_bits.append(f"go{go_ver}" if not str(go_ver).startswith("go") else str(go_ver))
+    if fix_ver:
+        note_bits.append(str(fix_ver))
+    note = truncate_note(
+        " · ".join(note_bits) if note_bits else (row.get("notes") or "toolchain verify")
+    )
+    return f"• {linkify_issue_keys(escape_mrkdwn(key))} — {escape_mrkdwn(note)}"
+
+
+def _aggregate_toolchain_rebuilds(remediation: list[dict]) -> list[dict[str, Any]]:
+    """Collapse toolchain_rebuild / skipped_existing_rebuild rows by commit_url."""
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in remediation:
+        action = row.get("action", "")
+        if action not in {"toolchain_rebuild", "skipped_existing_rebuild"}:
+            continue
+        commit_url = row.get("commit_url") or ""
+        repo = row.get("repo", "")
+        branch = row.get("branch", "")
+        group = commit_url or f"{repo}@{branch}:{row.get('commit') or row.get('cve_id')}"
+        entry = by_key.setdefault(
+            group,
+            {
+                "commit_url": commit_url,
+                "commit": row.get("commit", ""),
+                "repo": repo,
+                "branch": branch,
+                "issue_keys": [],
+                "images": list(row.get("images") or []),
+                "action": action,
+            },
+        )
+        if row.get("commit") and not entry["commit"]:
+            entry["commit"] = row["commit"]
+        keys = row.get("issue_keys") or []
+        if row.get("issue_key"):
+            keys = list(keys) + [row["issue_key"]]
+        for key in keys:
+            if key and key not in entry["issue_keys"]:
+                entry["issue_keys"].append(key)
+        for img in row.get("images") or []:
+            if img and img not in entry["images"]:
+                entry["images"].append(img)
+    items = list(by_key.values())
+    items.sort(key=lambda p: (p.get("repo", ""), p.get("branch", "")))
+    return items
+
+
 def _append_pr_section(
     blocks: list[dict],
     title: str,
@@ -339,6 +417,10 @@ def main() -> None:
     buckets = _bucket_prs(prs)
     closed_issues = _closure_rows_this_run(remediation, meta, "closed")
     closed_merged = _closure_rows_this_run(remediation, meta, "closed_merged_pr")
+    closed_toolchain = _closure_rows_this_run(
+        remediation, meta, "toolchain_verify_close"
+    )
+    toolchain_rebuilds = _aggregate_toolchain_rebuilds(remediation)
     pr_lookup = pr_lookup_from_entries(prs)
     for row in closed_merged:
         url = row.get("pr_url")
@@ -367,6 +449,8 @@ def main() -> None:
     merged_count = len(buckets["merged"])
     closed_na_count = len(closed_issues)
     closed_merged_count = len(closed_merged)
+    closed_toolchain_count = len(closed_toolchain)
+    rebuild_count = len(toolchain_rebuilds)
 
     if issue_count == 0 and not remediation:
         fallback = f"SF CVE fix — {today}: no active vulnerability issues"
@@ -379,6 +463,7 @@ def main() -> None:
         fallback = (
             f"SF CVE fix — {today}: {open_pr_count} open PR(s), "
             f"{merged_count} merged, {closed_merged_count} Jira closed (merged PR), "
+            f"{closed_toolchain_count} closed (toolchain), "
             f"{closed_na_count} closed N/A, {cves_processed or 0} CVE(s) processed"
         )
         summary_lines = [
@@ -393,7 +478,9 @@ def main() -> None:
             f"*Open PRs:* {open_pr_count} "
             f"({len(buckets['draft'])} draft · {len(buckets['awaiting_approval'])} ready) · "
             f"*Merged:* {merged_count} · *Jira closed (merged PR):* {closed_merged_count} · "
-            f"*Closed (N/A):* {closed_na_count}"
+            f"*Closed (toolchain):* {closed_toolchain_count} · "
+            f"*Closed (N/A):* {closed_na_count} · "
+            f"*Toolchain rebuilds:* {rebuild_count}"
         )
 
         blocks: list[dict] = [
@@ -407,6 +494,15 @@ def main() -> None:
             blocks, "Ready for review — approve", buckets["awaiting_approval"]
         )
         _append_pr_section(blocks, "Merged this cycle", buckets["merged"])
+
+        if toolchain_rebuilds:
+            lines = [_format_toolchain_rebuild_line(r) for r in toolchain_rebuilds]
+            blocks.append(
+                section_mrkdwn(
+                    f"*Toolchain rebuilds* ({rebuild_count})\n" + "\n".join(lines)
+                )
+            )
+            blocks.append({"type": "divider"})
 
         if closed_merged:
             merged_groups = _aggregate_closed_merged(closed_merged)
@@ -431,6 +527,16 @@ def main() -> None:
                     )
                 )
                 blocks.append({"type": "divider"})
+
+        if closed_toolchain:
+            lines = [_format_toolchain_close_line(row) for row in closed_toolchain[:20]]
+            blocks.append(
+                section_mrkdwn(
+                    f"*Closed this run (toolchain verify)* ({closed_toolchain_count})\n"
+                    + "\n".join(lines)
+                )
+            )
+            blocks.append({"type": "divider"})
 
         if closed_issues:
             closed_lines = [_format_closed_na_line(row) for row in closed_issues[:20]]
@@ -464,7 +570,8 @@ def main() -> None:
     print(
         f"Wrote {out_path} "
         f"({open_pr_count} open, {merged_count} merged, "
-        f"{closed_merged_count} jira-closed, {closed_na_count} closed N/A)"
+        f"{closed_merged_count} jira-closed, {closed_toolchain_count} toolchain-closed, "
+        f"{closed_na_count} closed N/A, {rebuild_count} rebuilds)"
     )
 
 

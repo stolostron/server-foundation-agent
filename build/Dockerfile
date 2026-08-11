@@ -10,6 +10,7 @@
 #   4. AWS resource management (aws CLI)
 #   5. Bug reproduction on OCP clusters (oc, kubectl, go test)
 #   6. GitHub App authentication for autonomous mode (openssl, gh-wrapper)
+#   7. Konflux image verification for toolchain CVEs (skopeo + go version -m)
 #
 # NOT included (not used by any SFA skill):
 #   - Node.js, Google Cloud CLI, Docker CLI
@@ -85,6 +86,11 @@ RUN mkdir -p /etc/apt/keyrings \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
        > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# === skopeo ===
+# Used by: sfa-cve-toolchain-verify (inspect/copy Konflux images for go version -m)
+RUN apt-get update && apt-get install -y --no-install-recommends skopeo \
     && rm -rf /var/lib/apt/lists/*
 
 # === yq (YAML processor) ===

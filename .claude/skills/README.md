@@ -25,7 +25,9 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-solution-add](sfa-solution-add/SKILL.md) | Add a new solution (错题本 entry) with credential scanning and grep-friendly format | On demand |
 | [sfa-bug-analyze](sfa-bug-analyze/SKILL.md) | Analyze Jira bug for SF relevance and reproducibility scoring | On demand |
 | [sfa-bug-reproduce](sfa-bug-reproduce/SKILL.md) | Orchestrate full bug reproduction: provision cluster, test, post results | On demand |
-| [sfa-cve-analysis](sfa-cve-analysis/SKILL.md) | Monitor CVE issues, group by CVE, create tracking tasks, impact analysis across branches | On demand |
+| [sfa-cve-analysis](sfa-cve-analysis/SKILL.md) | Monitor CVE issues; **classify toolchain vs module first**; tracking tasks; branch impact (module path) | On demand |
+| [sfa-cve-toolchain](sfa-cve-toolchain/SKILL.md) | Go toolchain/stdlib CVEs: map image→Dockerfile, auto TRIGGER_BUILD Konflux rebuild, Jira comment + In Progress | On demand |
+| [sfa-cve-toolchain-verify](sfa-cve-toolchain-verify/SKILL.md) | Verify Konflux rebuild Go version (`go version -m`), set Fix Version, comment evidence, Close Vulnerability | On demand |
 | [sfa-repo-architecture](sfa-repo-architecture/SKILL.md) | Generate architectural overview of upstream OCM-io vs downstream stolostron repos (Mermaid diagrams) | On demand |
 
 ## Adding a New Skill

@@ -242,3 +242,99 @@ def test_format_closed_na_line_escapes_malicious_issue_key():
     )
     assert "<!here>" not in line
     assert "redhat.atlassian.net/browse/ACM-1" in line
+
+
+def test_aggregate_toolchain_rebuilds_collapses_by_commit():
+    remediation = [
+        {
+            "action": "toolchain_rebuild",
+            "cve_id": "CVE-2026-42504",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.11",
+            "commit": "6031040741660bca3ae07df68240cae9c26af5c6",
+            "commit_url": (
+                "https://github.com/stolostron/ocm/commit/"
+                "6031040741660bca3ae07df68240cae9c26af5c6"
+            ),
+            "issue_key": "ACM-37383",
+            "images": ["multicluster-engine/addon-manager-rhel9"],
+        },
+        {
+            "action": "skipped_existing_rebuild",
+            "cve_id": "CVE-2026-42504",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.11",
+            "commit": "6031040741660bca3ae07df68240cae9c26af5c6",
+            "commit_url": (
+                "https://github.com/stolostron/ocm/commit/"
+                "6031040741660bca3ae07df68240cae9c26af5c6"
+            ),
+            "issue_keys": ["ACM-37384", "ACM-37395"],
+            "images": ["multicluster-engine/placement-rhel9"],
+        },
+    ]
+    groups = _mod._aggregate_toolchain_rebuilds(remediation)
+    assert len(groups) == 1
+    assert groups[0]["repo"] == "stolostron/ocm"
+    assert set(groups[0]["issue_keys"]) == {"ACM-37383", "ACM-37384", "ACM-37395"}
+    assert len(groups[0]["images"]) == 2
+    line = _mod._format_toolchain_rebuild_line(groups[0])
+    assert "stolostron/ocm" in line
+    assert "6031040" in line
+    assert "ACM-37383" in line
+
+
+def test_format_toolchain_close_line():
+    line = _mod._format_toolchain_close_line(
+        {
+            "issue_key": "ACM-37577",
+            "action": "toolchain_verify_close",
+            "closed_this_run": True,
+            "go_ver": "1.25.11",
+            "fix_version": "MCE 2.11.5",
+        }
+    )
+    assert "ACM-37577" in line
+    assert "go1.25.11" in line
+    assert "MCE 2.11.5" in line
+
+
+def test_main_includes_toolchain_sections(tmp_path):
+    rem = [
+        {
+            "action": "toolchain_rebuild",
+            "cve_id": "CVE-2026-39825",
+            "repo": "stolostron/ocm",
+            "branch": "backplane-2.11",
+            "commit": "abc1234deadbeef",
+            "commit_url": "https://github.com/stolostron/ocm/commit/abc1234deadbeef",
+            "issue_keys": ["ACM-37577"],
+        },
+        {
+            "action": "toolchain_verify_close",
+            "cve_id": "CVE-2026-39825",
+            "issue_key": "ACM-37577",
+            "closed_this_run": True,
+            "go_ver": "1.25.11",
+            "fix_version": "MCE 2.11.5",
+        },
+    ]
+    rem_path = tmp_path / "remediation.json"
+    rem_path.write_text(json.dumps(rem), encoding="utf-8")
+    out_path = tmp_path / "slack_payload.json"
+    with patch.object(_mod, "pr_state_from_row", return_value=None):
+        with patch.object(sys, "argv", ["gen", str(tmp_path), str(out_path)]):
+            _mod.main()
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    parts: list[str] = [str(payload.get("text") or "")]
+    for block in payload["blocks"]:
+        text = block.get("text")
+        if isinstance(text, dict):
+            parts.append(str(text.get("text") or ""))
+        elif isinstance(text, str):
+            parts.append(text)
+    joined = "\n".join(parts)
+    assert "Toolchain rebuilds" in joined
+    assert "Closed this run (toolchain verify)" in joined
+    assert "*Toolchain rebuilds:* 1" in joined
+    assert "abc1234" in joined

@@ -1,16 +1,21 @@
 # SF fix CVE (agent-swarm)
 
 Monitor Server Foundation ProsSec vulnerability issues, create or update per-CVE
-tracking tasks, run deep multi-branch impact analysis, post findings to Jira, open
-**draft PRs** for fixable CVEs, and **close** vulnerability issues classified as
-Not Applicable.
+tracking tasks, **classify each CVE as Go toolchain/stdlib vs module**, run deep
+multi-branch impact analysis (module path), post findings to Jira, open **draft PRs**
+for module CVEs, trigger **Konflux rebuilds** for toolchain CVEs, and **close**
+vulnerability issues classified as Not Applicable (or after verified rebuild /
+merged PR).
 
 **Developer guide:** [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
 — human gates, Jira issue types, PR grooming, auto-close rules, and troubleshooting.
 
 Designed for **non-interactive** scheduled or on-demand runs (cron or
 `instruction_prompt: CVE-YYYY-NNNNN`). Skill reference:
-`.claude/skills/sfa-cve-analysis/SKILL.md`. PR patterns: `prompts/jira-solve.md`.
+`.claude/skills/sfa-cve-analysis/SKILL.md` (classify first),
+`.claude/skills/sfa-cve-toolchain/SKILL.md` (rebuild),
+`.claude/skills/sfa-cve-toolchain-verify/SKILL.md` (verify + close).
+PR patterns: `prompts/jira-solve.md`.
 
 ## SFA conventions
 
@@ -112,8 +117,12 @@ Repos using `release-*` instead of `backplane-*`: `klusterlet-addon-controller`,
 ## Workflow
 
 ```
-Collect → Group by CVE → Tracking tasks → Deep analysis → Jira comments → Remediation → Slack → Summary
+Collect → Group by CVE → Classify (toolchain vs module) → Tracking tasks
+  → Deep analysis → Jira comments → Remediation (rebuild OR draft PR) → Slack → Summary
 ```
+
+**Critical:** classify remediation path **before** deep module analysis or draft PRs.
+Do not open `go.mod` bump PRs for toolchain/stdlib CVEs.
 
 ## Phase 1: Collect vulnerability issues
 
@@ -148,6 +157,59 @@ Collect → Group by CVE → Tracking tasks → Deep analysis → Jira comments 
 
 3. Apply dedup (skip CVEs fully analyzed unless `FORCE_REANALYSIS`). Write
    `.output/cve-analysis/cve_to_process.json` — CVE IDs needing work this run.
+
+## Phase 2.5: Classify remediation path (REQUIRED)
+
+For **every** CVE in `cve_to_process.json`, classify **before** Phase 4 module deep
+analysis or Phase 6 draft PRs.
+
+Write `.output/cve-analysis/classification-{cve_id}.json`:
+
+```json
+{
+  "cve_id": "CVE-2026-42504",
+  "path": "toolchain",
+  "min_go": "1.25.4",
+  "module": null,
+  "rationale": "stdlib mime; fix is Go >=1.25.4; no go.mod bump"
+}
+```
+
+or
+
+```json
+{
+  "cve_id": "CVE-2026-39821",
+  "path": "module",
+  "min_go": null,
+  "module": "golang.org/x/net",
+  "fix_version": "v0.56.0",
+  "rationale": "advisory fixes only via x/net bump; not a stdlib Go floor"
+}
+```
+
+### Classification rules (deterministic — evaluate in order)
+
+Stop at the **first** matching rule. Serialize the result in
+`classification-{cve_id}.json` (`path`, `min_go`, `module`, `fix_version`, `rationale`).
+
+| # | Evidence | `path` | Notes |
+|---|----------|--------|-------|
+| 1 | Advisory/GO vuln fixes **only** via a **Go version floor** (stdlib package; no required module bump) | `toolchain` | Record `min_go` |
+| 2 | Advisory fixes **only** via `go get <module>@v…` (no Go floor) | `module` | Record `module` + `fix_version` |
+| 3a | Dual-fixed (Go ≥ X **or** module ≥ Y) **and** vulnerable module package path is **not** imported | `toolchain` | Confirm with `go mod why` / grep; indirect dep alone ≠ import |
+| 3b | Dual-fixed **and** vulnerable module package path **is** imported/used | `module` | Unless docs prove stdlib alone remediates this binary |
+| 4 | Incomplete/conflicting signals **but** a Go floor exists | `toolchain` | Record uncertainty in `rationale`; **do not** open a module PR |
+| 5 | Else | `module` | Proceed with deep analysis |
+
+Do **not** use “majority of signals” heuristics — follow the table above.
+
+### Routing after classification
+
+| `path` | Phases 3–5 | Phase 6 |
+|--------|------------|---------|
+| `toolchain` | Tracking task + short analysis comment (toolchain, `min_go`, no `go get`) | §6.0 Konflux rebuild (`sfa-cve-toolchain`); skip §6.4 draft PRs |
+| `module` | Full deep analysis as today | §6.2–§6.5 (Not Applicable / already fixed / draft PR / close on merge) |
 
 ## Phase 3: Tracking tasks
 
@@ -199,15 +261,22 @@ Record new `tracking_key`.
 
 Run for **every** CVE in `cve_to_process.json` (non-interactive — do not ask the user).
 
+**Gate:** read `.output/cve-analysis/classification-{cve_id}.json`. If `path` is
+`toolchain`, skip the module-oriented branch clone / `go mod why` table below.
+Instead write a short report documenting: classification, `min_go`, rebuild-sufficient
+vs tag-bump, and “no go.mod changes”. Then continue to Phase 5 with that report.
+
 ### 4.1 CVE metadata
 
 WebSearch / pkg.go.dev vuln DB for each CVE:
 
-- Affected package and version range
-- Fixed version
+- Affected package and version range (stdlib vs module)
+- Fixed version **and/or** minimum Go version
 - Brief description
+- Dual-fixed? (Go floor **or** module bump)
 
-Save to `.output/cve-analysis/cve-meta-{cve_id}.json`.
+Save to `.output/cve-analysis/cve-meta-{cve_id}.json`. If metadata shows a Go floor and
+no primary module path, update classification to `toolchain` before continuing.
 
 ### 4.2 Clone and analyze branches
 
@@ -270,9 +339,10 @@ For each issue key in the CVE group, MCP `add_comment` with a **component-specif
 summary:
 
 - Issue key, repository, branch (from JIRA target version / summary bracket)
-- Installed dependency version vs fix version
-- Impact assessment (one line)
-- Remediation command (`go get …`)
+- Installed dependency version vs fix version **or** required Go floor (`min_go`)
+- Impact assessment (one line) **and** remediation path (`toolchain` | `module`)
+- Remediation command: for module → `go get …`; for toolchain → rebuild with
+  `openshift-golang-builder` / `TRIGGER_BUILD` (no `go get`)
 - Link to tracking task: `[ACM-XXXXX|https://redhat.atlassian.net/browse/ACM-XXXXX]`
 
 Skip issues that already have the dedup signature (unless `FORCE_REANALYSIS`).
@@ -284,6 +354,10 @@ user.
 
 **Start each run with an empty** `.output/cve-analysis/remediation.json` (`[]`). Append
 rows as actions occur this run — do not carry forward rows from prior runs.
+
+**Exception — durable rebuild state:** keep
+`.output/cve-analysis/toolchain_rebuilds.json` across runs (do **not** wipe it). Used by
+§6.0 to avoid duplicate `TRIGGER_BUILD` pushes for the same `(cve_id, repo, branch)`.
 
 Write `.output/cve-analysis/remediation.json` — array of action records:
 
@@ -304,28 +378,101 @@ Write `.output/cve-analysis/remediation.json` — array of action records:
 }
 ```
 
-Set `"closed_this_run": true` **only** on `closed` and `closed_merged_pr` rows when
-this run successfully transitions the issue to Closed. Omit or set `false` for all other
-actions. Slack *Closed this run* sections include **only** rows with `closed_this_run:
-true`.
+**Toolchain action schemas** (required fields):
 
-`action` values: `pr_opened`, `pr_merged`, `pr_closed`, `closed`, `closed_merged_pr`,
+`toolchain_rebuild` / `skipped_existing_rebuild` (one row per `(repo, branch)` group):
+
+```json
+{
+  "cve_id": "CVE-2026-39825",
+  "action": "toolchain_rebuild",
+  "repo": "stolostron/ocm",
+  "branch": "backplane-2.11",
+  "commit": "6031040741660bca3ae07df68240cae9c26af5c6",
+  "commit_url": "https://github.com/stolostron/ocm/commit/6031040741660bca3ae07df68240cae9c26af5c6",
+  "images": ["multicluster-engine/work-rhel9", "multicluster-engine/placement-rhel9"],
+  "issue_keys": ["ACM-37577", "ACM-37587"],
+  "triggered_at": "2026-08-10T16:47:16Z",
+  "notes": "TRIGGER_BUILD push",
+  "closed_this_run": false
+}
+```
+
+`toolchain_verify_close` (one row per closed Vulnerability):
+
+```json
+{
+  "cve_id": "CVE-2026-39825",
+  "issue_key": "ACM-37577",
+  "action": "toolchain_verify_close",
+  "repo": "stolostron/ocm",
+  "branch": "backplane-2.11",
+  "image": "quay.io/redhat-user-workloads/crt-redhat-acm-tenant/work-mce-211:6031040…",
+  "go_ver": "1.25.11",
+  "fix_version": "MCE 2.11.5",
+  "commit": "6031040741660bca3ae07df68240cae9c26af5c6",
+  "commit_url": "https://github.com/stolostron/ocm/commit/6031040741660bca3ae07df68240cae9c26af5c6",
+  "notes": "go version -m meets min_go 1.25.10",
+  "closed_this_run": true
+}
+```
+
+Set `"closed_this_run": true` **only** on `closed`, `closed_merged_pr`, and
+`toolchain_verify_close` rows when this run successfully transitions the issue to Closed.
+Omit or set `false` for all other actions. Slack *Closed this run* sections include
+**only** rows with `closed_this_run: true`.
+
+`action` values: `toolchain_rebuild`, `skipped_existing_rebuild`, `toolchain_verify_close`,
+`pr_opened`, `pr_merged`, `pr_closed`, `closed`, `closed_merged_pr`,
 `skipped_already_fixed`, `skipped_existing_pr`, `failed`.
 
 When a row has `pr_url`, also record live GitHub fields from `gh pr view` (see PR
 state helpers below): `pr_state` (`OPEN` / `MERGED` / `CLOSED`), `is_draft`, `merged_at`.
 Phase 7 re-fetches these fields before Slack; stale merged PRs must not appear as drafts.
 
+### 6.0 Toolchain CVEs → Konflux rebuild (not draft PRs)
+
+When `classification-{cve_id}.json` has `"path": "toolchain"`:
+
+1. **Do not** open `go.mod` / vendor bump PRs (close any mistaken open draft for this
+   CVE with a comment pointing at toolchain remediation).
+2. Map images → `(repo, branch)` rebuild groups via `map-image-to-dockerfile.py`.
+3. **Idempotency (required before every push):**
+   - Load `.output/cve-analysis/toolchain_rebuilds.json` (create `{ "rebuilds": [] }` if
+     missing).
+   - For each `(cve_id, repo, branch)` group: if an entry already exists **and**
+     `FORCE_REBUILD` is not set → **do not** run `trigger-konflux-rebuild.sh`. Record
+     `action: skipped_existing_rebuild` with the stored `commit` / `commit_url`, and reuse
+     that commit for Jira comments / verify.
+   - Secondary check: if any open sibling Jira already has an `sfa-cve-toolchain`
+     rebuild comment with a `TRIGGER_BUILD` commit URL for this repo/branch, treat as
+     existing (same skip path) and upsert `toolchain_rebuilds.json`.
+4. For groups with no prior rebuild (or `FORCE_REBUILD`): follow
+   [sfa-cve-toolchain](../.claude/skills/sfa-cve-toolchain/SKILL.md) — push
+   `TRIGGER_BUILD` **once per group**, comment on each Vulnerability, transition
+   **In Progress**. Record `action: toolchain_rebuild` and **append/update**
+   `toolchain_rebuilds.json` with `{cve_id, repo, branch, commit, commit_url,
+   triggered_at, issue_keys, images}`.
+5. When rebuilds are ready (same run if images exist, or a later run): follow
+   [sfa-cve-toolchain-verify](../.claude/skills/sfa-cve-toolchain-verify/SKILL.md) —
+   `go version -m`, set Fix Version, Close. Record `action: toolchain_verify_close` with
+   `closed_this_run: true` (include `image`, `go_ver`, `fix_version`, `commit_url`).
+6. Skip §6.4 for this CVE. §6.2 / §6.3 still apply if a sibling is Not Applicable /
+   already fixed.
+
 ### 6.1 Build remediation plan
 
-From `deep-analysis-{cve_id}.md`, map each **active** vulnerability issue to:
+From `classification-{cve_id}.json` + `deep-analysis-{cve_id}.md`, map each **active**
+vulnerability issue to:
 
+- Remediation path (`toolchain` → §6.0; `module` → §6.2–§6.5)
 - Repository (pscomponent label or summary image path → repo name)
 - Target branch (branch mapping table above)
 - Per-issue impact from deep analysis for that repo/branch
 
-**Group fixes:** one draft PR per `(repo, branch, CVE)` — not one PR per container-image
-ticket. Link all related vulnerability issue keys in the PR body and Jira comments.
+**Group fixes:** toolchain → one `TRIGGER_BUILD` per `(repo, branch)`; module → one
+draft PR per `(repo, branch, CVE)`. Link all related vulnerability issue keys in
+comments.
 
 ### 6.2 Not Applicable → close Jira
 
@@ -357,9 +504,12 @@ When classification is **✅ Not Vulnerable** (installed version ≥ fix version
 - Record `action: skipped_already_fixed` in `remediation.json`
 - Do **not** close automatically (human/QE may still want scan ticket cleanup)
 
-### 6.4 Vulnerable / Potentially Vulnerable → draft PR
+### 6.4 Vulnerable / Potentially Vulnerable → draft PR (module path only)
 
-When classification is **❌ Vulnerable** or **⚠️ Potentially Vulnerable**:
+**Skip this section when classification is `toolchain`** (use §6.0).
+
+When classification is **`module`** and impact is **❌ Vulnerable** or
+**⚠️ Potentially Vulnerable**:
 
 **PR state helpers (required whenever recording `pr_url`):**
 
@@ -600,7 +750,8 @@ approval steps or bare `repo#number` references — Slack links PRs automaticall
 ### 7.1 Verify closure records
 
 Before Slack, confirm every Jira transitioned to Closed **this run** has a matching row in
-`remediation.json` (`action`: `closed` or `closed_merged_pr`, `closed_this_run: true`).
+`remediation.json` (`action`: `closed`, `closed_merged_pr`, or `toolchain_verify_close`,
+with `closed_this_run: true`).
 If any closure is missing, append the row now. Re-read `remediation.json` after edits.
 Do **not** add closure rows for issues that were already Closed before this run.
 
@@ -626,10 +777,13 @@ python3 workflows/fix-cve/generate_slack_payload.py \
 Input: `remediation.json`, optional `run_meta.json`, optional `vulnerabilities.json`.
 Buckets open PRs into *Draft*, *Ready for review*, and *Merged* using live GitHub state.
 Follow-up lists each open PR as a clickable link with the required human action.
-Reports `closed_merged_pr` and `closed` rows with `closed_this_run: true` under *Closed
-this run (merged PR)* and *Closed as Not Applicable*. Falls back to
-`run_meta.jira_closed_this_run` when `remediation.json` is incomplete. Issues closed on
-prior runs are **not** re-reported.
+Reports:
+- `toolchain_rebuild` / `skipped_existing_rebuild` under *Toolchain rebuilds*
+- `toolchain_verify_close` (`closed_this_run: true`) under *Closed this run (toolchain verify)*
+- `closed_merged_pr` and `closed` (`closed_this_run: true`) under *Closed this run (merged PR)*
+  and *Closed as Not Applicable*
+Falls back to `run_meta.jira_closed_this_run` when `remediation.json` is incomplete. Issues
+closed on prior runs are **not** re-reported.
 
 ### 7.4 Send
 
@@ -666,6 +820,7 @@ Report in session output:
 |------|--------|
 | `CVE-YYYY-NNNNN` | Analyze only that CVE (all statuses) |
 | `FORCE_REANALYSIS` | Ignore dedup; repost all comments |
+| `FORCE_REBUILD` | Ignore `toolchain_rebuilds.json` / prior TRIGGER_BUILD; push again |
 | `SKIP_DEEP_ANALYSIS` | Tracking tasks only (Phases 1–3) |
 | `SKIP_REMEDIATION` | Analysis + Jira comments only (skip Phase 6) |
 | `SKIP_SLACK` | Skip Phase 7 |
@@ -674,14 +829,18 @@ Report in session output:
 ## Do not
 
 - Ask the user for confirmation (automated mode)
+- Skip Phase 2.5 classification or open module bump PRs for toolchain/stdlib CVEs
 - Skip Phase 7 when `SLACK_WEBHOOK_URL` is set (unless `SKIP_SLACK`)
 - Hand-format tracking task repository tables (always use the script)
 - Use curl REST for comments on vulnerability issues
 - Create duplicate tracking tasks for the same CVE
 - Mark draft PRs ready for review or merge them
-- Close vulnerability issues unless: (a) **Not Applicable** with evidence (§6.2), or
-  (b) linked fix PR is **MERGED** per `gh` (§6.5)
+- Close vulnerability issues unless: (a) **Not Applicable** with evidence (§6.2),
+  (b) linked fix PR is **MERGED** per `gh` (§6.5), or (c) toolchain verify with
+  `go version -m` ≥ `min_go` + Fix Version (§6.0 / `sfa-cve-toolchain-verify`)
 - Open more than one PR per `(repo, branch, CVE)` per run
 - Cascade major dependency upgrades on older branches (follow the older-branch SOP)
 - Clone or write analysis artifacts under `/tmp` (OpenCode rejects `external_directory (/tmp/*)`);
   use `.output/cve-analysis/` only
+- Recommend bumping an indirect module (e.g. `golang.org/x/net`) when the advisory is
+  dual-fixed via stdlib and the component does not import the vulnerable package path
