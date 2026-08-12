@@ -22,7 +22,7 @@ Load these on-demand based on the task at hand:
 | [API Reference](jira/api-reference.md) | `docs/jira/api-reference.md` | REST API endpoints, authentication, curl examples |
 | [Templates](jira/templates.md) | `docs/jira/templates.md` | Issue creation templates (Bug, Epic, Story, Task, Vulnerability) |
 | [Automated bug fix (developer guide)](automated-bug-fix-developer-guide.md) | `docs/automated-bug-fix-developer-guide.md` | End-to-end Jira → draft PR → merge flow; human gates and labels |
-| [Automated CVE fix (developer guide)](automated-cve-fix-developer-guide.md) | `docs/automated-cve-fix-developer-guide.md` | ProsSec CVE flow: tracking tasks, analysis, draft PRs, auto-close |
+| [Automated CVE fix (developer guide)](automated-cve-fix-developer-guide.md) | `docs/automated-cve-fix-developer-guide.md` | ProsSec CVE flow: analysis, draft PRs, auto-close |
 | [Agent automation](../prompts/README.md#jira-automation-model) | `prompts/README.md` | Scheduled triage + fix pipeline, labels, grooming (operator reference) |
 
 ## Bootstrap Sequence
@@ -65,7 +65,7 @@ For automated daily team coaching (burndown, cycle time, Slack), use the [daily-
 |-------|---------|---------|
 | [sfa-bug-analyze](../.claude/skills/sfa-bug-analyze/SKILL.md) | SF relevance and reproducibility scoring for one bug | "analyze bug ACM-12345", "check reproducibility" |
 | [sfa-bug-reproduce](../.claude/skills/sfa-bug-reproduce/SKILL.md) | End-to-end reproduction (cluster, test, Jira update) | "reproduce bug ACM-12345" |
-| [sfa-cve-analysis](../.claude/skills/sfa-cve-analysis/SKILL.md) | CVE grouping, tracking tasks, branch impact analysis | CVE monitoring, security triage |
+| [sfa-cve-analysis](../.claude/skills/sfa-cve-analysis/SKILL.md) | CVE grouping, classify toolchain vs module, branch impact analysis | CVE monitoring, security triage |
 
 For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-triage](../workflows/daily-bug-triage.md) instead of `sfa-jira-triage`. Agent-swarm runnable prompt: [prompts/daily-bug-triage.md](../prompts/daily-bug-triage.md).
 
@@ -76,7 +76,7 @@ For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-tria
 - [Automated bug fix](automated-bug-fix-developer-guide.md) — end-to-end bug flow,
   human gates, labels, schedules, and troubleshooting.
 - [Automated CVE fix](automated-cve-fix-developer-guide.md) — ProsSec vulnerability
-  issues, tracking tasks, dependency PRs, and auto-close rules.
+  issues, dependency PRs, and auto-close rules.
 
 Two-stage SF Jira automation:
 

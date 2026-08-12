@@ -14,7 +14,7 @@ agent needs in a single injected file per run.
 - [Automated bug fix — developer guide](../docs/automated-bug-fix-developer-guide.md)
   — human gates, labels, schedules, and end-to-end flow from New bug to merged PR.
 - [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
-  — ProsSec vulnerability issues, tracking tasks, dependency PRs, auto-close rules.
+  — ProsSec vulnerability issues, dependency PRs, auto-close rules.
 
 Two-stage SF Jira automation:
 
@@ -70,9 +70,9 @@ Triage also references helper scripts under `workflows/daily-bug-triage/` and op
 long-form docs in `workflows/daily-bug-triage.md`.
 
 **CVE fix:** `fix-cve.md` groups ProsSec vulnerability issues by CVE,
-**classifies toolchain/stdlib vs module first**, creates tracking tasks via
-`format-cve-tracking-task.py`, runs deep branch impact analysis (module path),
-posts Jira comments, opens **draft PRs** for module CVEs or **Konflux rebuilds** for
+**classifies toolchain/stdlib vs module first**, runs deep branch impact analysis
+(module path), posts Jira comments on **Vulnerability** issues (does **not** create
+per-CVE summary Tasks), opens **draft PRs** for module CVEs or **Konflux rebuilds** for
 toolchain CVEs, and **closes** vulnerability issues when Not Applicable / verified.
 Skills: `.claude/skills/sfa-cve-analysis/`, `sfa-cve-toolchain/`,
 `sfa-cve-toolchain-verify/`.

@@ -1,11 +1,11 @@
 # SF fix CVE (agent-swarm)
 
-Monitor Server Foundation ProsSec vulnerability issues, create or update per-CVE
-tracking tasks, **classify each CVE as Go toolchain/stdlib vs module**, run deep
-multi-branch impact analysis (module path), post findings to Jira, open **draft PRs**
-for module CVEs, trigger **Konflux rebuilds** for toolchain CVEs, and **close**
-vulnerability issues classified as Not Applicable (or after verified rebuild /
-merged PR).
+Monitor Server Foundation ProsSec vulnerability issues, **classify each CVE as Go
+toolchain/stdlib vs module**, generate the CVE **summary/inventory** (repos + issue
+table — keep), post findings to Jira **Vulnerability** issues (do **not** create
+per-CVE tracking Tasks), open **draft PRs** for module CVEs, trigger **Konflux
+rebuilds** for toolchain CVEs, and **close** vulnerability issues classified as Not
+Applicable (or after verified rebuild / merged PR).
 
 **Developer guide:** [Automated CVE fix — developer guide](../docs/automated-cve-fix-developer-guide.md)
 — human gates, Jira issue types, PR grooming, auto-close rules, and troubleshooting.
@@ -65,30 +65,22 @@ analyze that CVE only (include Closed/Done vulnerability issues for that CVE).
 **Exclude:** bulk container-scan tickets without a single CVE in the summary (e.g.
 `[Server Foundation] … - N HIGH CVEs`) unless `INCLUDE_BULK_SCANS` is set.
 
-## Tracking task conventions
+## CVE summary / inventory (required; no Jira Task)
 
-| Field | Value |
-|-------|-------|
-| Type | Task |
-| Project | ACM |
-| Component | Server Foundation |
-| Summary | `CVE-{cve_id} ({issue_count} issues, {repo_count} repos)` |
-| Work type | `10609` (Security & Compliance) — pass numeric ID to MCP `create_issue` |
-| Assignee | Prefer Qing Hao; if assign fails, use `rjung@redhat.com` or leave unassigned |
-| Description | From `format-cve-tracking-task.py` (never hand-format tables) |
+Always run `format-cve-tracking-task.py` to build the CVE summary (repos, issue
+table, counts). Save under `.output/cve-analysis/` and include it in Vulnerability
+comments (Phase 5).
 
-**Existing tracking task JQL** (per CVE):
+**Stop only:** creating a Jira Task from that output
+(`CVE-{cve_id} ({issue_count} issues, {repo_count} repos)`).
 
-```
-project = ACM AND issuetype = Task AND component = "Server Foundation" AND summary ~ "CVE-{cve_id}"
-```
+**Keep:** summary generation, deep analysis, per-issue comments, remediation, Slack.
 
 ## Dedup between runs
 
 Skip **re-analysis and re-commenting** (Phases 3–5) for a CVE when **all** are true:
 
-1. An open tracking task exists (`summary ~ "CVE-{cve_id}"`, not Closed/Done), **and**
-2. Every active vulnerability issue for that CVE has a comment containing **both**
+1. Every active vulnerability issue for that CVE has a comment containing **both**
    `Deep CVE Impact Analysis` and `_— server-foundation-agent_`
 
 If new vulnerability issues appeared since last run, re-run analysis for that CVE and
@@ -123,12 +115,14 @@ Repos using `release-*` instead of `backplane-*`: `klusterlet-addon-controller`,
 ## Workflow
 
 ```
-Collect → Group by CVE → Classify (toolchain vs module) → Tracking tasks
-  → Deep analysis → Jira comments → Remediation (rebuild OR draft PR) → Slack → Summary
+Collect → Group by CVE → Classify (toolchain vs module) → CVE summary (no Task)
+  → Deep analysis → Jira comments (Vulnerability only) → Remediation → Slack → Summary
 ```
 
 **Critical:** classify remediation path **before** deep module analysis or draft PRs.
 Do not open `go.mod` bump PRs for toolchain/stdlib CVEs.
+**Stop only** creating per-CVE tracking Tasks; **keep** the CVE summary content,
+analysis, Vulnerability comments, remediation, and Slack.
 
 ## Phase 1: Collect vulnerability issues
 
@@ -222,25 +216,14 @@ Do **not** use “majority of signals” heuristics — follow the table above.
 
 | `path` | Phases 3–5 | Phase 6 |
 |--------|------------|---------|
-| `toolchain` | Tracking task + short analysis comment (toolchain, `min_go`, no `go get`) | §6.0 Konflux rebuild (`sfa-cve-toolchain`); skip §6.4 draft PRs |
-| `module` | Full deep analysis as today | §6.2–§6.5 (Not Applicable / already fixed / draft PR / close on merge) |
+| `toolchain` | CVE summary + short analysis comment on each Vulnerability (toolchain, `min_go`, no `go get`) | §6.0 Konflux rebuild (`sfa-cve-toolchain`); skip §6.4 draft PRs |
+| `module` | CVE summary + full deep analysis as today | §6.2–§6.5 (Not Applicable / already fixed / draft PR / close on merge) |
 
-## Phase 3: Tracking tasks
+## Phase 3: CVE summary (no tracking Task)
 
 For each CVE in `cve_to_process.json`:
 
-### 3.1 Check existing tracker
-
-MCP search:
-
-```
-project = ACM AND issuetype = Task AND component = "Server Foundation" AND summary ~ "CVE-{cve_id}" AND status NOT IN (Closed, Done)
-```
-
-If found → record `tracking_key` in `.output/cve-analysis/tracking/{cve_id}.json`.
-Skip creation.
-
-### 3.2 Generate description (required script)
+### 3.1 Generate summary (required)
 
 Fetch vulnerability issues for the CVE via MCP, save REST-shaped JSON for the script:
 
@@ -251,26 +234,19 @@ Fetch vulnerability issues for the CVE via MCP, save REST-shaped JSON for the sc
 python3 .claude/skills/sfa-cve-analysis/format-cve-tracking-task.py \
   .output/cve-analysis/issues-{cve_id}.json \
   {cve_id} \
-  > .output/cve-analysis/description-{cve_id}.txt
+  > .output/cve-analysis/summary-{cve_id}.txt
 ```
 
-Parse counts from description header (`Total Related Issues`, repo count from
-`**Repository:` lines).
+Parse counts from the summary header (`Total Related Issues`, repo count from
+`**Repository:` lines). Keep this file for Phase 5 comments and session output.
 
-### 3.3 Create tracking task (if missing)
+### 3.2 Do not create a tracking Task
 
-MCP `create_issue`:
+**Forbidden:** MCP `create_issue` for a Task with summary
+`CVE-{cve_id} ({issue_count} issues, {repo_count} repos)` (or any other per-CVE
+tracking ticket). Existing Tasks of that form may remain; do not create new ones.
 
-- `project_key`: ACM
-- `issue_type`: Task
-- `components`: ["Server Foundation"]
-- `summary`: `CVE-{cve_id} ({issue_count} issues, {repo_count} repos)`
-- `description`: contents of `description-{cve_id}.txt`
-- `work_type`: `10609`
-- `assignee`: try Qing Hao account; on failure use `rjung@redhat.com`
-
-Record new `tracking_key`.
-
+**Keep** posting the summary content as comments on Vulnerability issues (Phase 5).
 ## Phase 4: Deep impact analysis
 
 Run for **every** CVE in `cve_to_process.json` (non-interactive — do not ask the user).
@@ -342,25 +318,24 @@ _— server-foundation-agent_
 Convert markdown reports with `h2.` / `h3.` headings, `*bold*`, `{{monospace}}`,
 `||table||` rows.
 
-### 5.1 Tracking task
+### 5.1 Individual vulnerability issues
 
-MCP `add_comment` on `tracking_key` with **full** deep analysis report from
-`deep-analysis-{cve_id}.md`.
+For each issue key in the CVE group, MCP `add_comment` with:
 
-### 5.2 Individual vulnerability issues
-
-For each issue key in the CVE group, MCP `add_comment` with a **component-specific**
-summary:
-
-- Issue key, repository, branch (from JIRA target version / summary bracket)
-- Installed dependency version vs fix version **or** required Go floor (`min_go`)
-- Impact assessment (one line) **and** remediation path (`toolchain` | `module`)
-- Remediation command: for module → `go get …`; for toolchain → rebuild with
-  `openshift-golang-builder` / `TRIGGER_BUILD` (no `go get`)
-- Link to tracking task: `[ACM-XXXXX|https://redhat.atlassian.net/browse/ACM-XXXXX]`
+1. **CVE summary** — wiki-markup version of `summary-{cve_id}.txt` (repos, related
+   keys, issue table) so the inventory stays visible without a tracking Task
+2. **Deep analysis** — full report or a component-specific section that still includes
+   the `Deep CVE Impact Analysis` heading for dedup:
+   - Issue key, repository, branch (from JIRA target version / summary bracket)
+   - Installed dependency version vs fix version **or** required Go floor (`min_go`)
+   - Impact assessment (one line) **and** remediation path (`toolchain` | `module`)
+   - Remediation command: for module → `go get …`; for toolchain → rebuild with
+     `openshift-golang-builder` / `TRIGGER_BUILD` (no `go get`)
+   - Sibling Vulnerability keys for the same CVE
 
 Skip issues that already have the dedup signature (unless `FORCE_REANALYSIS`).
 
+Do **not** `create_issue` a per-CVE tracking Task. Do **keep** the summary in comments.
 ## Phase 6: Remediation actions
 
 Run after Phase 5 (or after Phase 2 when every CVE was analysis-dedup'd) unless
@@ -373,9 +348,9 @@ merged-PR issues.
 
 **Impact source when this run skipped deep analysis:** for each CVE in
 `cve_remediate.json` that has no `deep-analysis-{cve_id}.md` from this run, recover
-per-issue ❌ / ⚠️ / ✅ / ➖ classification from the existing tracking-task or
-vulnerability-issue comment that contains `Deep CVE Impact Analysis` (and the
-remediation command / package fix version). Do not invent a new classification.
+per-issue ❌ / ⚠️ / ✅ / ➖ classification from an existing vulnerability-issue
+comment that contains `Deep CVE Impact Analysis` (and the remediation command /
+package fix version). Do not invent a new classification.
 
 **Start each run with an empty** `.output/cve-analysis/remediation.json` (`[]`). Append
 rows as actions occur this run — do not carry forward rows from prior runs.
@@ -519,7 +494,6 @@ When deep analysis classifies the issue's repo/branch as **➖ Not Applicable**:
 3. **First** record each closed issue in `remediation.json` with `action: closed`,
    `closed_this_run: true`, and a `notes` rationale; mirror in `run_meta.json` →
    `jira_closed_this_run`. **Then** transition.
-4. MCP `add_comment` on the tracking task summarizing closed keys for this CVE
 
 **Guardrail:** close **only** when classification is Not Applicable with documented
 evidence in the comment. Never close ❌ Vulnerable or ⚠️ Potentially Vulnerable issues.
@@ -561,8 +535,8 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
 1. **Dedup PR:** use `gh pr list --state open` on the repo with title containing
    `{cve_id}`; verify with `gh pr view --json state,isDraft,mergedAt`. Do **not** treat
    Jira `git_pull_requests` as authoritative — always verify with `gh`. If an open PR is
-   found → record `skipped_existing_pr` with PR state fields, link PR in tracking-task
-   comment, ensure each linked issue is **In Progress** (see step 2), then skip new PR
+   found → record `skipped_existing_pr` with PR state fields, link PR in a comment on
+   each linked Vulnerability issue, ensure each linked issue is **In Progress** (see step 2), then skip new PR
 2. **Start work in Jira** — for each linked vulnerability issue (MCP `transition_issue`):
    - If status is already **In Progress** → skip
    - If status is New/To Do/Backlog → transition to **In Progress** (transition name
@@ -640,9 +614,7 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
      Jira must not block new fixes
    - Leave status at **In Progress** after opening a draft PR — do **not** transition to
      Review (humans move to Review after marking the PR ready for review)
-9. MCP `add_comment` on tracking task — PR table for this CVE (include PR state:
-   draft / ready / merged)
-10. Record `action: pr_opened` with `pr_url`, `pr_state`, `is_draft`, and `merged_at` in
+9. Record `action: pr_opened` with `pr_url`, `pr_state`, `is_draft`, and `merged_at` in
     `remediation.json`
 
 **Limit:** at most **one new PR per repo/branch/CVE** per run. Defer extra branches to
@@ -718,9 +690,6 @@ For each **In Progress** issue:
      }
      ```
 
-6. MCP `add_comment` on the CVE tracking task — table of issues closed via merged PR
-   **this run only** (issue key → PR link → reason)
-
 When one merged PR covers multiple vulnerability issues (listed in the PR body), **close
 and record `closed_merged_pr` with `closed_this_run: true` for every linked issue still
 In Progress** — not only the first. Parse `ACM-xxxxx` keys from the merged PR
@@ -746,7 +715,8 @@ Write `.output/cve-analysis/remediation-report.md` with:
 - Failures (PR create, transition, tests)
 
 Post the remediation summary (or link to full report) as MCP `add_comment` on each
-tracking task processed this run.
+**Vulnerability** issue remediated this run (skip if the same summary was already posted
+with `_— server-foundation-agent_` unless `FORCE_REANALYSIS`).
 
 Write `.output/cve-analysis/run_meta.json` before Phase 7 (counts for Slack):
 
@@ -849,9 +819,8 @@ bash .claude/skills/sfa-slack-notify/send_to_slack.sh \
 Report in session output:
 
 - Vulnerability issues found / CVEs grouped / CVEs analysis-skipped (dedup) vs remediated
-- Tracking tasks created vs reused
 - Deep analyses completed (this run)
-- Jira comments posted (tracking + per-issue counts)
+- Jira comments posted (per Vulnerability issue counts)
 - **Remediation:** PRs by state (draft / ready / merged; table: PR URL, repo, branch,
   linked keys) — include PRs opened this run for analysis-dedup'd CVEs
 - **Remediation:** vulnerability issues closed as Not Applicable (table: key, rationale)
@@ -870,7 +839,7 @@ Report in session output:
 | `CVE-YYYY-NNNNN` | Analyze only that CVE (all statuses) |
 | `FORCE_REANALYSIS` | Ignore analysis dedup; repost all comments (Phase 6 still always runs unless `SKIP_REMEDIATION`) |
 | `FORCE_REBUILD` | Ignore `toolchain_rebuilds.json` / prior TRIGGER_BUILD; push again |
-| `SKIP_DEEP_ANALYSIS` | Tracking tasks only (Phases 1–3) |
+| `SKIP_DEEP_ANALYSIS` | Collect + classify + inventory only (Phases 1–3); skip Phases 4–5 |
 | `SKIP_REMEDIATION` | Analysis + Jira comments only (skip Phase 6) |
 | `SKIP_SLACK` | Skip Phase 7 |
 | `INCLUDE_BULK_SCANS` | Include multi-CVE scanner tickets |
@@ -880,9 +849,8 @@ Report in session output:
 - Ask the user for confirmation (automated mode)
 - Skip Phase 2.5 classification or open module bump PRs for toolchain/stdlib CVEs
 - Skip Phase 7 when `SLACK_WEBHOOK_URL` is set (unless `SKIP_SLACK`)
-- Hand-format tracking task repository tables (always use the script)
+- Create per-CVE summary/tracking Tasks (`CVE-… (N issues, M repos)`)
 - Use curl REST for comments on vulnerability issues
-- Create duplicate tracking tasks for the same CVE
 - Mark draft PRs ready for review or merge them
 - Close vulnerability issues unless: (a) **Not Applicable** with evidence (§6.2),
   (b) linked fix PR is **MERGED** per `gh` (§6.5), or (c) toolchain verify with

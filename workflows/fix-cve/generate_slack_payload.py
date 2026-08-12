@@ -214,7 +214,7 @@ def _build_follow_up_text(
     if buckets["merged"]:
         return "• _All tracked CVE PRs merged this run — see Closed (merged PR) for Jira updates_"
     return (
-        "• _No open CVE PRs need action this run — monitor z-stream backports in tracking tasks_"
+        "• _No open CVE PRs need action this run — monitor z-stream backports in Vulnerability comments / Slack_"
     )
 
 
