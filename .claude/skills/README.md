@@ -26,8 +26,8 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-bug-analyze](sfa-bug-analyze/SKILL.md) | Analyze Jira bug for SF relevance and reproducibility scoring | On demand |
 | [sfa-bug-reproduce](sfa-bug-reproduce/SKILL.md) | Orchestrate full bug reproduction: provision cluster, test, post results | On demand |
 | [sfa-cve-analysis](sfa-cve-analysis/SKILL.md) | Monitor CVE issues; **classify toolchain vs module first**; branch impact (module path); **no** summary Tasks | On demand |
-| [sfa-cve-toolchain](sfa-cve-toolchain/SKILL.md) | Go toolchain/stdlib CVEs: map image→Dockerfile, auto TRIGGER_BUILD Konflux rebuild, Jira comment + In Progress | On demand |
-| [sfa-cve-toolchain-verify](sfa-cve-toolchain-verify/SKILL.md) | Verify Konflux rebuild Go version (`go version -m`), set Fix Version, comment evidence, Close Vulnerability | On demand |
+| [sfa-cve-toolchain](sfa-cve-toolchain/SKILL.md) | Go toolchain/stdlib CVEs: map image→Dockerfile, check latest Quay image, auto `/retest` when needed, or verify+close | On demand |
+| [sfa-cve-toolchain-verify](sfa-cve-toolchain-verify/SKILL.md) | Verify Konflux image Go version (`go version -m`, `--latest` or post-rebuild), set Fix Version, Close | On demand |
 | [sfa-repo-architecture](sfa-repo-architecture/SKILL.md) | Generate architectural overview of upstream OCM-io vs downstream stolostron repos (Mermaid diagrams) | On demand |
 
 ## Adding a New Skill

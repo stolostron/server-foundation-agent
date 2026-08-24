@@ -329,8 +329,8 @@ For each issue key in the CVE group, MCP `add_comment` with:
    - Issue key, repository, branch (from JIRA target version / summary bracket)
    - Installed dependency version vs fix version **or** required Go floor (`min_go`)
    - Impact assessment (one line) **and** remediation path (`toolchain` | `module`)
-   - Remediation command: for module → `go get …`; for toolchain → rebuild with
-     `openshift-golang-builder` / `TRIGGER_BUILD` (no `go get`)
+   - Remediation command: for module → `go get …`; for toolchain → Konflux rebuild via
+     `/retest branch:<branch>` on branch HEAD (no `go get`, no `TRIGGER_BUILD` commit)
    - Sibling Vulnerability keys for the same CVE
 
 Skip issues that already have the dedup signature (unless `FORCE_REANALYSIS`).
@@ -357,7 +357,7 @@ rows as actions occur this run — do not carry forward rows from prior runs.
 
 **Exception — durable rebuild state:** keep
 `.output/cve-analysis/toolchain_rebuilds.json` across runs (do **not** wipe it). Used by
-§6.0 to avoid duplicate `TRIGGER_BUILD` pushes for the same `(cve_id, repo, branch)`.
+§6.0 to avoid duplicate `/retest` triggers for the same `(cve_id, repo, branch)`.
 
 Write `.output/cve-analysis/remediation.json` — array of action records:
 
@@ -393,7 +393,7 @@ Write `.output/cve-analysis/remediation.json` — array of action records:
   "images": ["multicluster-engine/work-rhel9", "multicluster-engine/placement-rhel9"],
   "issue_keys": ["ACM-37577", "ACM-37587"],
   "triggered_at": "2026-08-10T16:47:16Z",
-  "notes": "TRIGGER_BUILD push",
+  "notes": "/retest branch:<branch> on HEAD commit",
   "closed_this_run": false
 }
 ```
@@ -437,7 +437,13 @@ When `classification-{cve_id}.json` has `"path": "toolchain"`:
 1. **Do not** open `go.mod` / vendor bump PRs (close any mistaken open draft for this
    CVE with a comment pointing at toolchain remediation).
 2. Map images → `(repo, branch)` rebuild groups via `map-image-to-dockerfile.py`.
-3. **Idempotency (required before every push):**
+3. **Latest-image pre-check (required before rebuild):** For each open Vulnerability, run
+   `verify-konflux-image-go.py --latest` with `--repo`, `--branch`, `--dockerfile`,
+   `--issue-key`, `--min-go`, `--stream`, and `--binary`. When `ok` and `meets_min` (and
+   assembly check passes if applicable) and `fix_version` is set → post verification
+   comment, set Fix Version, Close; record `action: toolchain_verify_close` with
+   `notes` mentioning `quay_latest`. **Exclude** closed issues from rebuild groups.
+4. **Idempotency (required before every push):**
    - Load `.output/cve-analysis/toolchain_rebuilds.json` (create `{ "rebuilds": [] }` if
      missing).
    - For each `(cve_id, repo, branch)` group: if an entry already exists **and**
@@ -445,19 +451,20 @@ When `classification-{cve_id}.json` has `"path": "toolchain"`:
      `action: skipped_existing_rebuild` with the stored `commit` / `commit_url`, and reuse
      that commit for Jira comments / verify.
    - Secondary check: if any open sibling Jira already has an `sfa-cve-toolchain`
-     rebuild comment with a `TRIGGER_BUILD` commit URL for this repo/branch, treat as
+     rebuild comment with a commit URL for this repo/branch, treat as
      existing (same skip path) and upsert `toolchain_rebuilds.json`.
-4. For groups with no prior rebuild (or `FORCE_REBUILD`): follow
-   [sfa-cve-toolchain](../.claude/skills/sfa-cve-toolchain/SKILL.md) — push
-   `TRIGGER_BUILD` **once per group**, comment on each Vulnerability, transition
+5. For groups with no prior rebuild (or `FORCE_REBUILD`) **and** issues still open after
+   step 3: follow
+   [sfa-cve-toolchain](../.claude/skills/sfa-cve-toolchain/SKILL.md) — post
+   `/retest branch:<branch>` **once per group**, comment on each Vulnerability, transition
    **In Progress**. Record `action: toolchain_rebuild` and **append/update**
    `toolchain_rebuilds.json` with `{cve_id, repo, branch, commit, commit_url,
    triggered_at, issue_keys, images}`.
-5. When rebuilds are ready (same run if images exist, or a later run): follow
+6. When rebuilds are ready (same run if images exist, or a later run): follow
    [sfa-cve-toolchain-verify](../.claude/skills/sfa-cve-toolchain-verify/SKILL.md) —
    `go version -m`, set Fix Version, Close. Record `action: toolchain_verify_close` with
    `closed_this_run: true` (include `image`, `go_ver`, `fix_version`, `commit_url`).
-6. Skip §6.4 for this CVE. §6.2 / §6.3 still apply if a sibling is Not Applicable /
+7. Skip §6.4 for this CVE. §6.2 / §6.3 still apply if a sibling is Not Applicable /
    already fixed.
 
 ### 6.1 Build remediation plan
@@ -470,7 +477,7 @@ For each CVE in `cve_remediate.json`, map each **active** vulnerability issue to
 - Per-issue impact from `deep-analysis-{cve_id}.md` **or** prior analysis comment
   (when analysis was dedup'd this run)
 
-**Group fixes:** toolchain → one `TRIGGER_BUILD` per `(repo, branch)`; module → one
+**Group fixes:** toolchain → one `/retest branch:<branch>` per `(repo, branch)`; module → one
 draft PR per `(repo, branch, CVE)`. Link all related vulnerability issue keys in
 comments.
 
@@ -838,7 +845,7 @@ Report in session output:
 |------|--------|
 | `CVE-YYYY-NNNNN` | Analyze only that CVE (all statuses) |
 | `FORCE_REANALYSIS` | Ignore analysis dedup; repost all comments (Phase 6 still always runs unless `SKIP_REMEDIATION`) |
-| `FORCE_REBUILD` | Ignore `toolchain_rebuilds.json` / prior TRIGGER_BUILD; push again |
+| `FORCE_REBUILD` | Ignore `toolchain_rebuilds.json` / prior rebuild; retest again |
 | `SKIP_DEEP_ANALYSIS` | Collect + classify + inventory only (Phases 1–3); skip Phases 4–5 |
 | `SKIP_REMEDIATION` | Analysis + Jira comments only (skip Phase 6) |
 | `SKIP_SLACK` | Skip Phase 7 |

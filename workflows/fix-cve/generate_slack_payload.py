@@ -340,7 +340,7 @@ def _format_closed_na_line(row: dict[str, Any]) -> str:
 
 
 def _format_toolchain_rebuild_line(row: dict[str, Any]) -> str:
-    """One line for a Konflux TRIGGER_BUILD group."""
+    """One line for a Konflux /retest rebuild group."""
     repo = row.get("repo") or "?"
     branch = row.get("branch") or ""
     commit_url = row.get("commit_url") or ""

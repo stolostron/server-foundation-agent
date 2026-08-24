@@ -72,8 +72,81 @@ def test_find_binary_rejects_dotdot_hints(tmp_path: Path):
     assert _mod.find_binary(root, ["/work"]) == inside.resolve()
 
 
+def test_pick_latest_sha_tag_by_last_modified():
+    tags = [
+        {"name": "abc1234", "last_modified": "2026-01-01T00:00:00Z"},
+        {
+            "name": "01c1755e41350091a381719553424e60d31b4173",
+            "last_modified": "2026-08-21T18:00:49Z",
+        },
+        {"name": "latest", "last_modified": "2026-09-01T00:00:00Z"},
+    ]
+    picked = _mod.pick_latest_sha_tag(tags)
+    assert picked is not None
+    assert picked["name"] == "01c1755e41350091a381719553424e60d31b4173"
+
+
+def test_pick_latest_sha_tag_empty():
+    assert _mod.pick_latest_sha_tag([]) is None
+    assert _mod.pick_latest_sha_tag([{"name": "latest"}]) is None
+
+
 def test_fix_version_from_label_no_mce_default():
     assert _mod.fix_version_from_label("v2.11.5", "mce-2.11") == "MCE 2.11.5"
     assert _mod.fix_version_from_label("v2.16.3", "[rhacm-2.16]") == "ACM 2.16.3"
     assert _mod.fix_version_from_label("v2.11.5", None) is None
     assert _mod.fix_version_from_label("v2.11.5", "") is None
+
+
+def test_validate_jira_issue_key_allowlist():
+    assert _mod.validate_jira_issue_key("ACM-37547") == "ACM-37547"
+    assert _mod.validate_jira_issue_key("acm-40097") == "ACM-40097"
+    assert _mod.validate_jira_issue_key("  ACM-1  ") == "ACM-1"
+
+
+def test_validate_jira_issue_key_rejects_unsafe():
+    for bad in (
+        "",
+        "ACM",
+        "ACM-",
+        "37547",
+        "ACM-37547/extra",
+        "../ACM-37547",
+        "ACM-37547?fields=summary",
+        "ACM-37547&x=1",
+        "ACM-37547#fragment",
+        "ACM/37547",
+        "ACM\\37547",
+    ):
+        assert _mod.validate_jira_issue_key(bad) is None
+
+
+def test_fetch_jira_issue_rejects_invalid_key():
+    assert _mod.fetch_jira_issue("ACM-37547/evil") is None
+
+
+def test_resolve_latest_quay_tag_rejects_prefix_bypass():
+    prefix = _mod.ALLOWED_IMAGE_PREFIX
+    bad = f"{prefix.rstrip('/')}-evil/work-mce-211"
+    try:
+        _mod.resolve_latest_quay_tag(bad)
+        raise AssertionError("expected ValueError for tenant prefix bypass")
+    except ValueError as exc:
+        assert "not allowed" in str(exc)
+
+
+def test_apply_arch_mismatch_failure_not_cleared_by_later_checks():
+    result = {"ok": True, "go_ver": "1.25.11"}
+    _mod.apply_arch_mismatch(result, "ppc64le", "amd64")
+    result["meets_min"] = True
+    result["ok"] = result["ok"] and result["meets_min"]
+    result["ok"] = result["ok"] and True  # assembly check pass
+    assert result["ok"] is False
+    assert "arch_warning" in result
+
+
+def test_apply_arch_mismatch_no_op_when_archs_match():
+    result = {"ok": True}
+    _mod.apply_arch_mismatch(result, "amd64", "amd64")
+    assert result["ok"] is True
+    assert "arch_warning" not in result
