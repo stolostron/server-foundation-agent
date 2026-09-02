@@ -21,7 +21,7 @@ project ACM. No Jira CLI or curl.
 **Agent queue JQL:**
 
 ```
-project = ACM AND component = "Server Foundation" AND resolution = Unresolved AND status in (New, "To Do") AND labels = agent-triaged AND labels = issue-for-agent AND labels != agent-processed ORDER BY created ASC
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND resolution = Unresolved AND status in (New, "To Do") AND labels = agent-triaged AND labels = issue-for-agent AND labels != agent-processed ORDER BY created ASC
 ```
 
 Extended conventions: `prompts/_sfa-conventions.md`
@@ -64,3 +64,5 @@ Extended conventions: `prompts/_sfa-conventions.md`
 - Use Jira CLI or curl
 - Process multiple issues per run
 - Fix issues that lack both `agent-triaged` and `issue-for-agent` labels
+- Process embargoed issues (**Embargoed Bug** issuetype or **Embargoed Security Issue**
+  security level)

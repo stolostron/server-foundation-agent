@@ -61,6 +61,8 @@ Extended conventions: `prompts/_sfa-conventions.md`
 
 4. **Eligibility check**
    - Project ACM, component `Server Foundation`, unresolved
+   - Issuetype **Bug** only — skip if issuetype is **Embargoed Bug** or security level is
+     **Embargoed Security Issue** (explain and stop; no PR)
    - Status New or To Do
    - Has labels `agent-triaged` and `issue-for-agent`, not `agent-processed`
    - If not eligible, explain why and stop (do not open a PR)

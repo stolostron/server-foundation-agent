@@ -5,6 +5,9 @@ Jira bug by searching the Server Foundation codebase for a likely root cause.
 
 **Read-only** — do not modify code, create branches, or open PRs.
 
+**Embargoed Bug:** if the issue issuetype is **Embargoed Bug** or security level is
+**Embargoed Security Issue**, do not analyze. Exit without writing analysis output.
+
 ## Input
 
 You receive a single bug object (from the orchestrator):

@@ -9,6 +9,9 @@ Orchestrate the complete bug reproduction workflow from analysis to cleanup.
 
 Runs [sfa-bug-analyze](../sfa-bug-analyze/SKILL.md) first, then provisions ACM/MCE, executes tests, and posts results. The [bug-analyze workflow](../../../workflows/bug-analyze.md) also redirects to these skills.
 
+**Embargoed issues:** do not reproduce — `sfa-bug-analyze` stops on **Embargoed Bug**
+issuetype or **Embargoed Security Issue** security level.
+
 ## Parameters
 
 | Parameter | Required | Default | Notes |

@@ -28,6 +28,31 @@ Script fallbacks (when MCP lacks comment access or posting fails) may use REST v
 **Project:** ACM
 **Team component:** `Server Foundation`
 
+### Embargoed issues (do not triage)
+
+**Never** triage, analyze, comment on, or auto-fix embargoed issues. Human handling only.
+
+Skip when **either**:
+
+| Signal | Jira field | Example value |
+|--------|------------|---------------|
+| Issue type | `issuetype` | `Embargoed Bug` |
+| Security level | `security` / `security_level` | `Embargoed Security Issue` |
+
+A **Vulnerability** (or **Bug**) with security level **Embargoed Security Issue** is still
+embargoed — issuetype alone is not enough (e.g. ACM-42085).
+
+- **JQL:** add both exclusions:
+  `AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue"`
+- **Runtime:** after `get_issue`, skip when `issuetype` is **Embargoed Bug** **or**
+  `security_level` (or `fields.security.name`) is **Embargoed Security Issue**. No Jira
+  comment, no `agent-triaged` label, no Slack detail.
+- Applies to: daily bug triage, `sfa-jira-triage`, `sfa-bug-analyze`, `sfa-bug-reproduce`,
+  `jira-pipeline`, `jira-solve`
+- **CVE automation** (`sfa-cve-analysis`, `fix-cve`, `sfa-cve-toolchain*`) is separate —
+  those skills may act on embargoed **Vulnerability** issues but must preserve the issue's
+  security level on comments (see `sfa-cve-toolchain`).
+
 ### Daily bug triage label
 
 After posting triage analysis, add label **`agent-triaged`** via MCP `update_issue` (or
@@ -48,7 +73,7 @@ Full automation model (diagram, grooming, schedules):
 **Agent queue JQL** (jira-pipeline):
 
 ```
-project = ACM AND component = "Server Foundation" AND resolution = Unresolved AND status in (New, "To Do") AND labels = agent-triaged AND labels = issue-for-agent AND labels != agent-processed ORDER BY created ASC
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND resolution = Unresolved AND status in (New, "To Do") AND labels = agent-triaged AND labels = issue-for-agent AND labels != agent-processed ORDER BY created ASC
 ```
 
 Grooming: triage first → human reviews → add `issue-for-agent` → pipeline picks up.

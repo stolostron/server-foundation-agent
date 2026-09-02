@@ -28,8 +28,12 @@ fallbacks.
 **New-bugs JQL:**
 
 ```
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = New ORDER BY priority ASC
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND status = New ORDER BY priority ASC
 ```
+
+**Embargoed issues:** never triage when issuetype is **Embargoed Bug** or security level is
+**Embargoed Security Issue** — skip with no Jira comment, no `agent-triaged` label, and no
+Slack detail (see `_sfa-conventions.md`).
 
 **Dedup** — skip re-analysis when **either**:
 
@@ -63,7 +67,7 @@ Run at the **start** of every run (even when there are zero New bugs). Non-inter
 **JQL (MCP `search_issues`):**
 
 ```jql
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND status = "In Progress"
 ```
 
 1. `mkdir -p .output/bug-triage`
@@ -140,7 +144,11 @@ For each **In Progress** issue:
 
 2. MCP search with new-bugs JQL, `max_results`: `50`
 
-3. Build `.output/bug-triage/new_bugs.json` — array of objects:
+3. **Filter embargoed issues** — if any result has issuetype **Embargoed Bug** or security
+   level **Embargoed Security Issue** (verify on `get_issue` when JQL omits `security`),
+   move to `bugs_embargoed_skipped.json` and exclude from triage. Do not comment or label.
+
+4. Build `.output/bug-triage/new_bugs.json` — array of objects:
 
    | Field | Source |
    |-------|--------|
@@ -151,7 +159,7 @@ For each **In Progress** issue:
    | `sprint` | Last sprint name if present |
    | `url` | `https://redhat.atlassian.net/browse/<KEY>` |
 
-4. **Early exit:** if zero bugs, send a minimal Slack message ("no new SF bugs") if
+5. **Early exit:** if zero bugs, send a minimal Slack message ("no new SF bugs") if
    `SLACK_WEBHOOK_URL` is set, then stop successfully.
 
 ## Phase 1.5: Dedup — skip previously analyzed
@@ -286,6 +294,7 @@ Report:
 
 - **PR merge → Review:** issues checked, transitioned to Review this run (from
   `pr_merge_review.json` where `reviewed_this_run: true`), skipped, failed
+- Embargoed issues skipped (count from `bugs_embargoed_skipped.json` if any)
 - Bugs found / analyzed / skipped (previously analyzed)
 - Counts by `analysis_status` and draft PRs created
 - Slack, Jira comment, and **`agent-triaged` label** status
@@ -302,6 +311,8 @@ Report:
 
 ## Do not
 
+- Triage, comment on, or label embargoed issues (**Embargoed Bug** issuetype or
+  **Embargoed Security Issue** security level)
 - Ask the user for confirmation (automated mode)
 - Use Jira CLI or curl for search/comment (except script fallbacks)
 - Transition Jira status except Phase 0 (**Review** when `gh` confirms PR **MERGED**)

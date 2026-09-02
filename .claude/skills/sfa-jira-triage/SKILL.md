@@ -1,6 +1,6 @@
 ---
 name: sfa-jira-triage
-description: "Generate a bug triage report for the Server Foundation team. Use this skill when the user wants to triage bugs, review new issues, check for unassigned bugs, or says 'triage bugs', 'new bugs', 'bug review', 'unassigned bugs', 'vulnerability review'. Queries Jira for recently created or unresolved bugs and formats a triage summary."
+description: "Generate a bug triage report for the Server Foundation team. Use this skill when the user wants to triage bugs, review new issues, check for unassigned bugs, or says 'triage bugs', 'new bugs', 'bug review', 'unassigned bugs', 'vulnerability review'. Queries Jira for recently created or unresolved bugs and formats a triage summary. Excludes Embargoed Bug issuetype and Embargoed Security Issue security level."
 ---
 
 # Jira Bug Triage
@@ -25,18 +25,20 @@ Generate a triage report for SF bugs and vulnerabilities.
 
 ### Step 1: Query new/open bugs
 
-> **Exclusion**: Konflux auto-created bugs (labels: `konflux`, `auto-created`) are handled by a separate system and MUST be excluded from triage.
+> **Exclusions** (handled outside agent scope or human-only):
+> - **Konflux auto-created bugs** (`labels = "konflux"` AND `labels = "auto-created"`) — separate system
+> - **Embargoed issues** — issuetype **Embargoed Bug** or security level **Embargoed Security Issue**; **never triage**
 
 **Query — New bugs in last N days:**
 
 ```
-project = ACM AND component = "Server Foundation" AND issuetype IN (Bug, Vulnerability) AND created >= -<days>d AND NOT (labels = "konflux" AND labels = "auto-created") ORDER BY priority ASC, created DESC
+project = ACM AND component = "Server Foundation" AND issuetype IN (Bug, Vulnerability) AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND created >= -<days>d AND NOT (labels = "konflux" AND labels = "auto-created") ORDER BY priority ASC, created DESC
 ```
 
 **Query — All unresolved bugs (if team overview needed):**
 
 ```
-project = ACM AND component = "Server Foundation" AND issuetype IN (Bug, Vulnerability) AND status NOT IN (Resolved, Closed) AND NOT (labels = "konflux" AND labels = "auto-created") ORDER BY priority ASC, cf[10840] ASC
+project = ACM AND component = "Server Foundation" AND issuetype IN (Bug, Vulnerability) AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND status NOT IN (Resolved, Closed) AND NOT (labels = "konflux" AND labels = "auto-created") ORDER BY priority ASC, cf[10840] ASC
 ```
 
 Request fields: `["issuetype", "summary", "status", "priority", "assignee", "customfield_10840", "created", "updated"]`.

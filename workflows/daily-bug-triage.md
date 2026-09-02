@@ -3,6 +3,8 @@
 Automatically triage all Server Foundation Jira bugs in "New" status by analyzing the codebase to find root causes,
 then send a summary Slack notification every weekday morning. **Also transitions In Progress bugs to Review when a linked fix PR is merged** (Phase 0). **Draft PR auto-fix (Phase 2.5) is off by default.**
 
+**Embargoed Bug** issues (`issuetype = "Embargoed Bug"`) are **never** triaged — excluded from JQL and skipped at runtime. Also skip any issue with security level **Embargoed Security Issue** (even when issuetype is Vulnerability or Bug).
+
 ## Agent-swarm prompt
 
 For [agent-swarm](https://github.com/stolostron/agent-swarm) (OpenCode/Crush), use the
@@ -42,7 +44,7 @@ Skip when `SKIP_PR_MERGE_REVIEW` is in `instruction_prompt`.
 ### 0.1 Query In Progress bugs
 
 ```jql
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND status = "In Progress"
 ```
 
 ### 0.2 For each issue
@@ -73,7 +75,7 @@ curl -s -X POST \
   -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "jql": "project = ACM AND component = \"Server Foundation\" AND issuetype = Bug AND status = New ORDER BY priority ASC",
+    "jql": "project = ACM AND component = \"Server Foundation\" AND issuetype = Bug AND issuetype != \"Embargoed Bug\" AND security != \"Embargoed Security Issue\" AND status = New ORDER BY priority ASC",
     "fields": ["issuetype", "key", "summary", "status", "priority", "assignee", "description", "components", "created", "updated", "customfield_10020"],
     "maxResults": 50
   }' \
