@@ -3,6 +3,8 @@
 Automatically triage all Server Foundation Jira bugs in "New" status by analyzing the codebase to find root causes,
 then send a summary Slack notification every weekday morning. **Also transitions In Progress bugs to Review when a linked fix PR is merged** (Phase 0). **Draft PR auto-fix (Phase 2.5) is off by default.**
 
+**Embargoed Bug** issues (`issuetype = "Embargoed Bug"`) are **never** triaged — skipped at runtime in Phase 1.2. Also skip any issue with security level **Embargoed Security Issue** (even when issuetype is Vulnerability or Bug).
+
 ## Agent-swarm prompt
 
 For [agent-swarm](https://github.com/stolostron/agent-swarm) (OpenCode/Crush), use the
@@ -42,7 +44,7 @@ Skip when `SKIP_PR_MERGE_REVIEW` is in `instruction_prompt`.
 ### 0.1 Query In Progress bugs
 
 ```jql
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND (level IS EMPTY OR level != "Embargoed Security Issue") AND status = "In Progress"
 ```
 
 ### 0.2 For each issue
@@ -73,8 +75,8 @@ curl -s -X POST \
   -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "jql": "project = ACM AND component = \"Server Foundation\" AND issuetype = Bug AND status = New ORDER BY priority ASC",
-    "fields": ["issuetype", "key", "summary", "status", "priority", "assignee", "description", "components", "created", "updated", "customfield_10020"],
+    "jql": "project = ACM AND component = \"Server Foundation\" AND issuetype IN (Bug, \"Embargoed Bug\") AND status = New ORDER BY priority ASC",
+    "fields": ["issuetype", "key", "summary", "status", "priority", "assignee", "description", "components", "created", "updated", "customfield_10020", "security"],
     "maxResults": 50
   }' \
   "https://redhat.atlassian.net/rest/api/3/search/jql" > .output/bug-triage/new_bugs_raw.json
@@ -85,14 +87,80 @@ curl -s -X POST \
 Extract structured bug info from the raw JSON:
 
 ```python
-import json, sys
+import json, os, sys
+import urllib.request
+import base64
+
+def is_embargoed(issue_type, security_level):
+    return issue_type == 'Embargoed Bug' or security_level == 'Embargoed Security Issue'
+
+def validate_embargo_fields(fields):
+    """Return (issue_type, security_level) or None if invalid (fail closed)."""
+    it = fields.get('issuetype') or {}
+    issue_type = it.get('name') if isinstance(it, dict) else None
+    if not issue_type or not isinstance(issue_type, str):
+        return None
+    sec = fields.get('security')
+    if sec is None:
+        return issue_type, ''
+    if isinstance(sec, dict):
+        name = sec.get('name')
+        if name and isinstance(name, str):
+            return issue_type, name
+        return None
+    return None
+
+def refetch_embargo_fields(issue_key):
+    email = os.environ.get('JIRA_EMAIL')
+    token = os.environ.get('JIRA_API_TOKEN')
+    if not email or not token:
+        return None
+    url = (
+        f'https://redhat.atlassian.net/rest/api/3/issue/{issue_key}'
+        '?fields=issuetype,security'
+    )
+    auth = base64.b64encode(f'{email}:{token}'.encode()).decode()
+    req = urllib.request.Request(url, headers={'Authorization': f'Basic {auth}'})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status != 200:
+                return None
+            body = json.loads(resp.read().decode())
+            return body.get('fields')
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
 
 data = json.load(open('.output/bug-triage/new_bugs_raw.json'))
 issues = data.get('issues', [])
 
 bugs = []
+embargoed_skipped = []
+unvalidated_skipped = []
 for issue in issues:
     f = issue['fields']
+    parsed = validate_embargo_fields(f)
+    if parsed is None:
+        refetched = refetch_embargo_fields(issue['key'])
+        if refetched is not None:
+            parsed = validate_embargo_fields(refetched)
+    if parsed is None:
+        unvalidated_skipped.append({
+            'key': issue['key'],
+            'summary': f.get('summary', ''),
+            'reason': 'missing or invalid issuetype/security fields',
+            'url': f'https://redhat.atlassian.net/browse/{issue["key"]}',
+        })
+        continue
+    issue_type, security_level = parsed
+
+    # Post-fetch embargo validation — skip before appending to new_bugs.json
+    if is_embargoed(issue_type, security_level):
+        embargoed_skipped.append({
+            'key': issue['key'],
+            'issuetype': issue_type,
+            'security_level': security_level,
+        })
+        continue
 
     # Extract description text from ADF (Atlassian Document Format)
     desc = ''
@@ -137,8 +205,17 @@ for issue in issues:
     })
 
 json.dump(bugs, open('.output/bug-triage/new_bugs.json', 'w'), indent=2)
-print(f"Found {len(bugs)} new bugs")
+json.dump(embargoed_skipped, open('.output/bug-triage/bugs_embargoed_skipped.json', 'w'), indent=2)
+json.dump(unvalidated_skipped, open('.output/bug-triage/bugs_unvalidated_skipped.json', 'w'), indent=2)
+print(
+    f"Found {len(bugs)} new bugs "
+    f"({len(embargoed_skipped)} embargoed skipped, {len(unvalidated_skipped)} unvalidated skipped)"
+)
 ```
+
+Requires `JIRA_EMAIL` and `JIRA_API_TOKEN` when search results omit or invalidate
+`issuetype` / `security` — refetch fails closed into `bugs_unvalidated_skipped.json`
+instead of `new_bugs.json`.
 
 ### 1.3 Early Exit
 

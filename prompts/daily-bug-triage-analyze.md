@@ -5,6 +5,11 @@ Jira bug by searching the Server Foundation codebase for a likely root cause.
 
 **Read-only** — do not modify code, create branches, or open PRs.
 
+**Embargoed issues:** if `issuetype` is **Embargoed Bug** or `security_level` is
+**Embargoed Security Issue**, do not analyze. Exit without writing analysis output.
+Check these fields on the input object first (from orchestrator Jira fetch); if either
+is missing, MCP `get_issue` and read `issue_type` / `security_level` before proceeding.
+
 ## Input
 
 You receive a single bug object (from the orchestrator):
@@ -15,6 +20,8 @@ You receive a single bug object (from the orchestrator):
   "summary": "...",
   "description": "...",
   "priority": "Major",
+  "issuetype": "Bug",
+  "security_level": "",
   "assignee": "Name",
   "assignee_email": "",
   "components": ["Server Foundation"],
@@ -24,6 +31,9 @@ You receive a single bug object (from the orchestrator):
   "url": "https://redhat.atlassian.net/browse/ACM-12345"
 }
 ```
+
+`issuetype` — from `fields.issuetype.name` (or MCP `issue_type`). `security_level` —
+from `fields.security.name` (or MCP `security_level`); empty string when unset.
 
 ## Workspace
 
@@ -35,6 +45,11 @@ You receive a single bug object (from the orchestrator):
 - Keyword → repo map: `workflows/daily-bug-triage.md` (Repo Identification section)
 
 ## Procedure
+
+### 0. Embargo guard (input-first)
+
+Before repository search, evaluate `issuetype` and `security_level` from the input
+object. Skip (no output JSON) when either matches an embargo signal (see above).
 
 ### 1. Identify relevant repository
 

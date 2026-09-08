@@ -9,6 +9,8 @@ Use these skills:
 
 **Trigger phrases:** `analyze bug ACM-12345`, `check bug reproducibility`, `reproduce bug ACM-12345`
 
+**Embargoed issues:** do not analyze or reproduce — human handling only (see `sfa-bug-analyze` Step 1.5: **Embargoed Bug** or **Embargoed Security Issue**).
+
 **Example:**
 
 ```bash

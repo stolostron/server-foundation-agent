@@ -49,6 +49,9 @@ Extended conventions: `prompts/_sfa-conventions.md`
 
 2. **Fetch issue** — MCP `get_issue` with `issue_key`
    - Extract: summary, description, labels, status, components, comments
+   - Extract **issuetype**: `issue_type` (MCP) or `fields.issuetype.name` (REST)
+   - Extract **security_level**: `security_level` (MCP) or `fields.security.name`
+     (REST); treat null/empty as no security level
    - From description: Context, Acceptance criteria (if present); repro steps if present
 
 3. **Load triage context**
@@ -59,8 +62,10 @@ Extended conventions: `prompts/_sfa-conventions.md`
      `workflows/daily-bug-triage.md` (Repo Identification section) or `docs/repos.md`
    - If `repos/` clones look empty, run once: `./repos/sync-repos.sh`
 
-4. **Eligibility check**
+4. **Eligibility check** (use issuetype and security_level from step 2)
    - Project ACM, component `Server Foundation`, unresolved
+   - Issuetype **Bug** only — stop if issuetype is **Embargoed Bug** or security_level is
+     **Embargoed Security Issue** (explain and stop; no PR)
    - Status New or To Do
    - Has labels `agent-triaged` and `issue-for-agent`, not `agent-processed`
    - If not eligible, explain why and stop (do not open a PR)

@@ -1,6 +1,6 @@
 ---
 name: sfa-bug-reproduce
-description: "Orchestrate full bug reproduction workflow: analyze bug, provision ACM cluster, execute test, capture results, and post to Jira. Use this skill when the user wants to reproduce a bug end-to-end, set up a test environment for a bug, or says 'reproduce bug ACM-12345', 'test ACM-12345', 'reproduce this bug automatically'."
+description: "Orchestrate full bug reproduction workflow: analyze bug, provision ACM cluster, execute test, capture results, and post to Jira. Use this skill when the user wants to reproduce a bug end-to-end, set up a test environment for a bug, or says 'reproduce bug ACM-12345', 'test ACM-12345', 'reproduce this bug automatically'. Skips embargoed issues (Embargoed Bug issuetype or Embargoed Security Issue security level)."
 ---
 
 # Bug Reproduction
@@ -8,6 +8,19 @@ description: "Orchestrate full bug reproduction workflow: analyze bug, provision
 Orchestrate the complete bug reproduction workflow from analysis to cleanup.
 
 Runs [sfa-bug-analyze](../sfa-bug-analyze/SKILL.md) first, then provisions ACM/MCE, executes tests, and posts results. The [bug-analyze workflow](../../../workflows/bug-analyze.md) also redirects to these skills.
+
+### Embargoed issues (do not reproduce)
+
+Honor the same guards as [sfa-bug-analyze](../sfa-bug-analyze/SKILL.md) Step 1.5. Skip when **either**:
+
+| Signal | Jira field | Value |
+|--------|------------|-------|
+| Issue type | `issuetype` | `Embargoed Bug` |
+| Security level | `security` / `security_level` | `Embargoed Security Issue` |
+
+Check **three times**: after initial Jira fetch (before SF/score gates), again **before provisioning** (Step 3), and again **before posting results** (Step 6). Re-fetch the issue on each guard so a mid-run embargo change is caught.
+
+On skip: do **not** provision, test, post Jira comments, or capture/post embargo details. Write `.output/reproduction-<KEY>.json` with `status: "skipped"` and exit successfully.
 
 ## Parameters
 
@@ -23,6 +36,108 @@ Runs [sfa-bug-analyze](../sfa-bug-analyze/SKILL.md) first, then provisions ACM/M
 
 ## Workflow
 
+### Embargo guard helper
+
+Reuse this snippet at each checkpoint (Steps 1, 3, 6). On match, write skipped outcome and stop.
+
+```bash
+write_skipped_embargo_outcome() {
+  local signal="$1"
+  cat > ".output/reproduction-${ISSUE_KEY}.json" <<EOF
+{
+  "issue_key": "${ISSUE_KEY}",
+  "status": "skipped",
+  "skip_reason": "embargoed",
+  "embargo_signal": "${signal}",
+  "completed_at": "$(date -Iseconds)"
+}
+EOF
+}
+
+write_jira_validation_failed_outcome() {
+  local detail="$1"
+  cat > ".output/reproduction-${ISSUE_KEY}.json" <<EOF
+{
+  "issue_key": "${ISSUE_KEY}",
+  "status": "skipped",
+  "skip_reason": "jira_validation_failed",
+  "validation_error": "${detail}",
+  "completed_at": "$(date -Iseconds)"
+}
+EOF
+}
+
+# Fail closed: require HTTP 200, valid JSON, fields.issuetype.name (string).
+# fields.security must be JSON null (unset) or an object with a non-empty name.
+load_jira_embargo_fields() {
+  local raw="$1"
+  local issue_type="$2"
+  local security_level="$3"
+
+  if ! jq -e . "$raw" >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! jq -e '.fields.issuetype.name | type == "string" and length > 0' "$raw" >/dev/null 2>&1; then
+    return 1
+  fi
+  local sec_kind
+  sec_kind=$(jq -r '.fields.security | type' "$raw" 2>/dev/null || echo "invalid")
+  case "$sec_kind" in
+    null)
+      printf -v "$issue_type" '%s' "$(jq -r '.fields.issuetype.name' "$raw")"
+      printf -v "$security_level" '%s' ""
+      return 0
+      ;;
+    object)
+      if ! jq -e '.fields.security.name | type == "string" and length > 0' "$raw" >/dev/null 2>&1; then
+        return 1
+      fi
+      printf -v "$issue_type" '%s' "$(jq -r '.fields.issuetype.name' "$raw")"
+      printf -v "$security_level" '%s' "$(jq -r '.fields.security.name' "$raw")"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+fetch_jira_embargo_raw() {
+  local raw="$1"
+  local fields="${2:-issuetype,security}"
+  local http_code
+  http_code=$(curl -sS -w "%{http_code}" -o "$raw" \
+    -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+    "https://redhat.atlassian.net/rest/api/2/issue/${ISSUE_KEY}?fields=${fields}") || return 1
+  [[ "$http_code" == "200" ]]
+}
+
+check_embargo_or_skip() {
+  local raw=".output/bug-${ISSUE_KEY}-raw.json"
+  if ! fetch_jira_embargo_raw "$raw" "issuetype,security,summary,components,versions,description,priority"; then
+    write_jira_validation_failed_outcome "Jira fetch failed or non-200 response"
+    echo "Skipped: could not fetch Jira issue for embargo check (fail closed)."
+    exit 0
+  fi
+  local issue_type security_level
+  if ! load_jira_embargo_fields "$raw" issue_type security_level; then
+    write_jira_validation_failed_outcome "missing or invalid issuetype/security fields"
+    echo "Skipped: could not validate Jira embargo fields (fail closed)."
+    exit 0
+  fi
+  if [[ "$issue_type" == "Embargoed Bug" ]]; then
+    write_skipped_embargo_outcome "Embargoed Bug"
+    echo "Skipped: issuetype Embargoed Bug (human handling only)."
+    exit 0
+  fi
+  if [[ "$security_level" == "Embargoed Security Issue" ]]; then
+    write_skipped_embargo_outcome "Embargoed Security Issue"
+    echo "Skipped: security level Embargoed Security Issue (human handling only)."
+    exit 0
+  fi
+}
+```
+
 ### Step 1: Analyze bug reproducibility
 
 Use `sfa-bug-analyze` to check if the bug has sufficient information:
@@ -30,37 +145,32 @@ Use `sfa-bug-analyze` to check if the bug has sufficient information:
 ```bash
 ISSUE_KEY="<issue-key>"
 
-# Run bug analysis (this creates .output/bug-analysis-${ISSUE_KEY}.json)
-# Execute sfa-bug-analyze skill inline or call the scripts directly
 mkdir -p .output
 
-# Fetch bug
-curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
-  "https://redhat.atlassian.net/rest/api/2/issue/$ISSUE_KEY" \
-  > .output/bug-${ISSUE_KEY}-raw.json
+# Guard 1 — before analysis / SF relevance / score checks
+check_embargo_or_skip
 
-# Extract fields and run analysis (simplified, see sfa-bug-analyze for full implementation)
-# ... scoring logic ...
+# Run sfa-bug-analyze (creates .output/bug-analysis-${ISSUE_KEY}.json)
+# Or execute its scripts inline — see sfa-bug-analyze/SKILL.md
 
-# Load analysis result
 SCORE=$(jq -r '.reproducibility_score' .output/bug-analysis-${ISSUE_KEY}.json)
 SF_RELEVANCE=$(jq -r '.sf_relevance' .output/bug-analysis-${ISSUE_KEY}.json)
 
 if [[ "$SF_RELEVANCE" == "Not SF" ]]; then
-  echo "❌ Bug is not SF-related. Stopping."
+  echo "Bug is not SF-related. Stopping."
   exit 1
 fi
 
 if [[ $SCORE -lt 8 ]]; then
-  echo "⚠️ Reproducibility score too low ($SCORE/12). Consider requesting more info first."
+  echo "Reproducibility score too low ($SCORE/12). Consider requesting more info first."
   echo "Missing: $(jq -r '.missing_info | join(", ")' .output/bug-analysis-${ISSUE_KEY}.json)"
   exit 1
 fi
 
-echo "✅ Bug is reproducible (Score: $SCORE/12, Relevance: $SF_RELEVANCE)"
+echo "Bug is reproducible (Score: $SCORE/12, Relevance: $SF_RELEVANCE)"
 ```
 
-**Decision point**: If score < 8 or Not SF, stop here and report to user.
+**Decision point**: Embargo skip exits 0 with `status: skipped`. If score < 8 or Not SF, stop and report to user.
 
 ### Step 2: Extract ACM/MCE version
 
@@ -89,6 +199,12 @@ EOF
 ```
 
 ### Step 3: Provision ACM cluster
+
+**Guard 2** — re-fetch and skip before any cluster work:
+
+```bash
+check_embargo_or_skip
+```
 
 Use `install-acm` skill to set up the test environment:
 
@@ -193,6 +309,29 @@ echo "✅ Evidence captured to .output/evidence-${ISSUE_KEY}/"
 ```
 
 ### Step 6: Post results to Jira
+
+**Guard 3** — re-fetch before posting; if embargoed now, skip comment only (preserve local artifacts):
+
+```bash
+if [[ "$post-results" == "true" ]]; then
+  raw=".output/bug-${ISSUE_KEY}-raw.json"
+  if ! fetch_jira_embargo_raw "$raw" "issuetype,security"; then
+    write_jira_validation_failed_outcome "Jira fetch failed or non-200 response"
+    echo "Skipped Jira post: could not fetch issue for embargo check (fail closed)."
+    post-results="false"
+  elif ! load_jira_embargo_fields "$raw" issue_type security_level; then
+    write_jira_validation_failed_outcome "missing or invalid issuetype/security fields"
+    echo "Skipped Jira post: could not validate embargo fields (fail closed)."
+    post-results="false"
+  elif [[ "$issue_type" == "Embargoed Bug" || "$security_level" == "Embargoed Security Issue" ]]; then
+    signal="$issue_type"
+    [[ "$security_level" == "Embargoed Security Issue" ]] && signal="$security_level"
+    write_skipped_embargo_outcome "$signal"
+    echo "Skipped Jira post: embargoed issue (human handling only)."
+    post-results="false"
+  fi
+fi
+```
 
 If `--post-results=true`, post reproduction results as a Jira comment:
 
@@ -362,6 +501,7 @@ Test ACM-31402 on a fresh cluster
 - **Test scripts**: Should exit 0 for pass, non-zero for fail
 - **Evidence collection**: Customize based on bug component (cluster-proxy, import-controller, etc.)
 - **Jira auth**: Uses `$JIRA_EMAIL` and `$JIRA_API_TOKEN`
+- **Embargoed issues**: Skipped with `status: skipped` in `reproduction-<KEY>.json` — no Jira comments
 
 ## Future Enhancements
 

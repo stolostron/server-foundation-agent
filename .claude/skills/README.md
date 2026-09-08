@@ -17,13 +17,13 @@ Skills are task-specific workflows the agent can execute. Each skill has a step-
 | [sfa-jira-comment](sfa-jira-comment/SKILL.md) | Add comments to Jira issues (PR links, progress updates) | On demand |
 | [sfa-jira-inbox](sfa-jira-inbox/SKILL.md) | Check Jira inbox and manage action items (assigned, reported, mentioned) | On demand |
 | [sfa-jira-standup](sfa-jira-standup/SKILL.md) | Generate daily standup report from Jira | On demand |
-| [sfa-jira-triage](sfa-jira-triage/SKILL.md) | Generate bug triage report (new/unassigned bugs) | On demand |
+| [sfa-jira-triage](sfa-jira-triage/SKILL.md) | Generate bug triage report (excludes embargoed issuetype/security level) | On demand |
 | [sfa-jira-sprint-report](sfa-jira-sprint-report/SKILL.md) | Generate sprint health report with per-member breakdown | On demand |
 | [sfa-update](sfa-update/SKILL.md) | Log session summary to updates.md (what was done, issues, limitations) | On demand |
 | [sfa-cluster-pools](sfa-cluster-pools/SKILL.md) | Manage OCP cluster pools, cluster claims, hibernation, and AWS resource cleanup | On demand |
 | [sfa-prow-config](sfa-prow-config/SKILL.md) | Prow config reference: ACM/MCE/OCP version mappings and SF repo ownership | On demand |
 | [sfa-solution-add](sfa-solution-add/SKILL.md) | Add a new solution (错题本 entry) with credential scanning and grep-friendly format | On demand |
-| [sfa-bug-analyze](sfa-bug-analyze/SKILL.md) | Analyze Jira bug for SF relevance and reproducibility scoring | On demand |
+| [sfa-bug-analyze](sfa-bug-analyze/SKILL.md) | Analyze Jira bug for SF relevance and reproducibility (skips embargoed issues) | On demand |
 | [sfa-bug-reproduce](sfa-bug-reproduce/SKILL.md) | Orchestrate full bug reproduction: provision cluster, test, post results | On demand |
 | [sfa-cve-analysis](sfa-cve-analysis/SKILL.md) | Monitor CVE issues; **classify toolchain vs module first**; branch impact (module path); **no** summary Tasks | On demand |
 | [sfa-cve-toolchain](sfa-cve-toolchain/SKILL.md) | Go toolchain/stdlib CVEs: map image→Dockerfile, check latest Quay image, auto `/retest` when needed, or verify+close | On demand |

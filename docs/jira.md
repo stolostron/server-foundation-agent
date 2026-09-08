@@ -54,7 +54,7 @@ If auth fails (missing env vars or invalid token), stop and report clearly.
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
 | [sfa-jira-standup](../.claude/skills/sfa-jira-standup/SKILL.md) | Daily standup report (per assignee) | "standup", "daily update" |
-| [sfa-jira-triage](../.claude/skills/sfa-jira-triage/SKILL.md) | Bug triage summary by severity (lightweight list) | "bug triage summary", "unassigned bugs" |
+| [sfa-jira-triage](../.claude/skills/sfa-jira-triage/SKILL.md) | Bug triage summary by severity (excludes embargoed issuetype/security level) | "bug triage summary", "unassigned bugs" |
 | [sfa-jira-sprint-report](../.claude/skills/sfa-jira-sprint-report/SKILL.md) | Sprint health report (quick team overview) | "sprint status", "sprint report" |
 
 For automated daily team coaching (burndown, cycle time, Slack), use the [daily-scrum-prep](../workflows/daily-scrum-prep.md) workflow instead of `sfa-jira-sprint-report`.
@@ -63,11 +63,11 @@ For automated daily team coaching (burndown, cycle time, Slack), use the [daily-
 
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
-| [sfa-bug-analyze](../.claude/skills/sfa-bug-analyze/SKILL.md) | SF relevance and reproducibility scoring for one bug | "analyze bug ACM-12345", "check reproducibility" |
+| [sfa-bug-analyze](../.claude/skills/sfa-bug-analyze/SKILL.md) | SF relevance and reproducibility scoring for one bug (skips embargoed issues) | "analyze bug ACM-12345", "check reproducibility" |
 | [sfa-bug-reproduce](../.claude/skills/sfa-bug-reproduce/SKILL.md) | End-to-end reproduction (cluster, test, Jira update) | "reproduce bug ACM-12345" |
 | [sfa-cve-analysis](../.claude/skills/sfa-cve-analysis/SKILL.md) | CVE grouping, classify toolchain vs module, branch impact analysis | CVE monitoring, security triage |
 
-For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-triage](../workflows/daily-bug-triage.md) instead of `sfa-jira-triage`. Agent-swarm runnable prompt: [prompts/daily-bug-triage.md](../prompts/daily-bug-triage.md).
+For deep triage of **New** bugs with codebase RCA and Slack, use [daily-bug-triage](../workflows/daily-bug-triage.md) instead of `sfa-jira-triage`. Agent-swarm runnable prompt: [prompts/daily-bug-triage.md](../prompts/daily-bug-triage.md). Embargoed issues (**Embargoed Bug** issuetype or **Embargoed Security Issue** security level) are excluded from SF agent bug triage.
 
 ## Agent automation
 

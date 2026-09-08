@@ -1,6 +1,6 @@
 ---
 name: sfa-bug-analyze
-description: "Analyze a Jira bug for Server Foundation relevance and reproducibility. Use this skill when the user wants to check if a bug can be reproduced, assess if it has enough information, or verify SF team ownership. Trigger phrases: 'analyze bug', 'check bug reproducibility', 'can we reproduce ACM-12345', 'is this bug reproducible', 'analyze ACM-12345', 'check if bug is SF-related'."
+description: "Analyze a Jira bug for Server Foundation relevance and reproducibility. Use this skill when the user wants to check if a bug can be reproduced, assess if it has enough information, or verify SF team ownership. Trigger phrases: 'analyze bug', 'check bug reproducibility', 'can we reproduce ACM-12345', 'is this bug reproducible', 'analyze ACM-12345', 'check if bug is SF-related'. Skips embargoed issues (Embargoed Bug issuetype or Embargoed Security Issue security level)."
 ---
 
 # Bug Reproducibility Analysis
@@ -52,6 +52,31 @@ cat .output/bug-${ISSUE_KEY}-raw.json | jq '{
   fix_version: [.fields.fixVersions[].name]
 }' > .output/bug-${ISSUE_KEY}-fields.json
 ```
+
+### Step 1.5: Skip embargoed issues
+
+Stop immediately (no analysis, Jira comment, or reproduction) when **either**:
+
+- `issuetype` is **Embargoed Bug**, or
+- `security_level` / `fields.security.name` is **Embargoed Security Issue**
+
+Inform the user that embargoed issues are human-handled only. Example: ACM-42085 is
+issuetype **Vulnerability** with security level **Embargoed Security Issue** — still skip.
+
+```bash
+ISSUE_TYPE=$(jq -r '.type' .output/bug-${ISSUE_KEY}-fields.json)
+SECURITY_LEVEL=$(jq -r '.security_level // .fields.security.name // empty' .output/bug-${ISSUE_KEY}-raw.json 2>/dev/null)
+# Re-fetch security from raw if not in fields.json:
+if [[ -z "$SECURITY_LEVEL" || "$SECURITY_LEVEL" == "null" ]]; then
+  SECURITY_LEVEL=$(jq -r '.fields.security.name // empty' .output/bug-${ISSUE_KEY}-raw.json)
+fi
+if [[ "$ISSUE_TYPE" == "Embargoed Bug" || "$SECURITY_LEVEL" == "Embargoed Security Issue" ]]; then
+  echo "Embargoed issue — skipping automated analysis (human handling only)."
+  exit 0
+fi
+```
+
+When fetching in Step 1, include `security` in API fields (REST: `fields=...,security`).
 
 ### Step 2: Check SF relevance
 
@@ -371,6 +396,8 @@ Check if ACM-12345 is SF-related and reproducible
   - 8-12: Good (ready to reproduce)
 - **Authentication**: Uses `$JIRA_EMAIL` and `$JIRA_API_TOKEN`
 - **Browse URL**: `https://redhat.atlassian.net/browse/<ISSUE-KEY>`
+- **Embargoed issues**: Never analyze — Step 1.5 skips **Embargoed Bug** issuetype and
+  **Embargoed Security Issue** security level
 
 ## Future Enhancements
 

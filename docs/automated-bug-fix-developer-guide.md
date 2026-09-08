@@ -153,7 +153,8 @@ next run retries the transition.
 
 ### What triage does for New bugs
 
-1. Finds all **New** bugs in project **ACM**, component **Server Foundation**.
+1. Finds all **New** bugs in project **ACM**, component **Server Foundation** (issuetype
+   **Bug** only; excludes **Embargoed Bug** and **Embargoed Security Issue**).
 2. Skips bugs already analyzed (label `agent-triaged` or existing triage comment).
 3. Runs codebase root-cause analysis per bug (sub-agents).
 4. Posts a **Bug Triage Analysis** comment on each analyzed issue.
@@ -162,6 +163,8 @@ next run retries the transition.
 
 ### What it does *not* do (by default)
 
+- Does **not** triage embargoed issues — issuetype **Embargoed Bug** or security level
+  **Embargoed Security Issue** (human handling only)
 - Does **not** change status for **New** bugs (only Phase 0 moves **In Progress** →
   **Review** when a fix PR is merged).
 - Does **not** open fix PRs unless operators enable `ENABLE_AUTO_FIX` (off by default).

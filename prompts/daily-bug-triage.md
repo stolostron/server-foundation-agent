@@ -25,11 +25,18 @@ Designed for **non-interactive** scheduled runs (weekday cron). Detailed referen
 `https://redhat.atlassian.net`, project ACM. No Jira CLI or curl except script
 fallbacks.
 
-**New-bugs JQL:**
+**New-bugs collect JQL** (Phase 1 — superset; runtime embargo filter in step 3):
 
 ```
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = New ORDER BY priority ASC
+project = ACM AND component = "Server Foundation" AND issuetype IN (Bug, "Embargoed Bug") AND status = New ORDER BY priority ASC
 ```
+
+Do **not** exclude embargo signals in this query — step 3 classifies embargoed issues into
+`bugs_embargoed_skipped.json`. Only non-embargoed issues continue to `new_bugs.json`.
+
+**Embargoed issues:** never triage when issuetype is **Embargoed Bug** or security level is
+**Embargoed Security Issue** — skip with no Jira comment, no `agent-triaged` label, and no
+Slack detail (see `_sfa-conventions.md`).
 
 **Dedup** — skip re-analysis when **either**:
 
@@ -63,7 +70,7 @@ Run at the **start** of every run (even when there are zero New bugs). Non-inter
 **JQL (MCP `search_issues`):**
 
 ```jql
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status = "In Progress"
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND (level IS EMPTY OR level != "Embargoed Security Issue") AND status = "In Progress"
 ```
 
 1. `mkdir -p .output/bug-triage`
@@ -138,21 +145,50 @@ For each **In Progress** issue:
 
 1. `mkdir -p .output/bug-triage`
 
-2. MCP search with new-bugs JQL, `max_results`: `50`
+2. MCP search with **new-bugs collect JQL** above (`max_results`: `50`)
 
-3. Build `.output/bug-triage/new_bugs.json` — array of objects:
+3. **Filter embargoed issues (fail closed)** — initialize
+   `.output/bug-triage/bugs_embargoed_skipped.json` and
+   `.output/bug-triage/bugs_unvalidated_skipped.json` as `[]`. For each search result,
+   resolve `issuetype` and `security_level` only after validation:
+
+   - **From search payload:** require `fields.issuetype.name` (non-empty string). For
+     `fields.security`, accept JSON `null` as unset (`security_level` = `""`); if it is an
+     object, require a non-empty `name`. Any other shape is invalid.
+   - **When security or issuetype is missing from search:** MCP `get_issue` (or REST with
+     `fields=issuetype,security`) and apply the same rules on a successful response.
+
+   **Unvalidated** (failed fetch, non-200, invalid JSON, or missing/invalid issuetype or
+   security fields): append `{key, summary, reason, url}` to `bugs_unvalidated_skipped.json`,
+   **exclude** from `new_bugs.json`, and do not comment, label, or include in Slack detail.
+
+   **Embargoed** (validated fields only): when issuetype is **Embargoed Bug** or
+   `security_level` is **Embargoed Security Issue**, append
+   `{key, summary, issuetype, security_level, url}` to `bugs_embargoed_skipped.json` and
+   exclude from triage the same way.
+
+   Only validated, non-embargoed results are candidates for `new_bugs.json`.
+
+4. Build `.output/bug-triage/new_bugs.json` from non-embargoed candidates only — array of objects:
 
    | Field | Source |
    |-------|--------|
    | `key`, `summary`, `priority`, `created`, `updated` | Issue fields |
+   | `issuetype` | `fields.issuetype.name` / MCP `issue_type` |
+   | `security_level` | `fields.security.name` / MCP `security_level` (empty string if unset) |
    | `description` | Plain text from description (truncate to 2000 chars) |
    | `assignee`, `assignee_email` | Assignee display name / email, or `Unassigned` |
    | `components` | Component names |
    | `sprint` | Last sprint name if present |
    | `url` | `https://redhat.atlassian.net/browse/<KEY>` |
 
-4. **Early exit:** if zero bugs, send a minimal Slack message ("no new SF bugs") if
-   `SLACK_WEBHOOK_URL` is set, then stop successfully.
+5. **Early exit:** if `new_bugs.json` is empty (no non-embargoed New bugs), skip Phases
+   1.5–4 and jump to **[Final summary](#final-summary)** so embargo-only runs still report
+   skip counts from `bugs_embargoed_skipped.json` and `bugs_unvalidated_skipped.json`
+   (array length; treat missing files as `0`). If `SLACK_WEBHOOK_URL` is set and
+   `instruction_prompt` does not contain `SKIP_SLACK`, send a minimal Slack notification
+   ("no new SF bugs"; include non-zero embargo/unvalidated skip counts), then stop
+   successfully.
 
 ## Phase 1.5: Dedup — skip previously analyzed
 
@@ -286,6 +322,8 @@ Report:
 
 - **PR merge → Review:** issues checked, transitioned to Review this run (from
   `pr_merge_review.json` where `reviewed_this_run: true`), skipped, failed
+- Embargoed issues skipped (count from `bugs_embargoed_skipped.json` if any)
+- Unvalidated issues skipped (count from `bugs_unvalidated_skipped.json` if any)
 - Bugs found / analyzed / skipped (previously analyzed)
 - Counts by `analysis_status` and draft PRs created
 - Slack, Jira comment, and **`agent-triaged` label** status
@@ -302,6 +340,8 @@ Report:
 
 ## Do not
 
+- Triage, comment on, or label embargoed issues (**Embargoed Bug** issuetype or
+  **Embargoed Security Issue** security level)
 - Ask the user for confirmation (automated mode)
 - Use Jira CLI or curl for search/comment (except script fallbacks)
 - Transition Jira status except Phase 0 (**Review** when `gh` confirms PR **MERGED**)

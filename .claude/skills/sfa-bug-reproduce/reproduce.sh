@@ -59,14 +59,105 @@ echo ""
 
 mkdir -p .output
 
+write_skipped_embargo_outcome() {
+  local signal="$1"
+  cat > ".output/reproduction-${ISSUE_KEY}.json" <<EOF
+{
+  "issue_key": "${ISSUE_KEY}",
+  "status": "skipped",
+  "skip_reason": "embargoed",
+  "embargo_signal": "${signal}",
+  "completed_at": "$(date -Iseconds)"
+}
+EOF
+}
+
+write_jira_validation_failed_outcome() {
+  local detail="$1"
+  cat > ".output/reproduction-${ISSUE_KEY}.json" <<EOF
+{
+  "issue_key": "${ISSUE_KEY}",
+  "status": "skipped",
+  "skip_reason": "jira_validation_failed",
+  "validation_error": "${detail}",
+  "completed_at": "$(date -Iseconds)"
+}
+EOF
+}
+
+load_jira_embargo_fields() {
+  local raw="$1"
+  local issue_type="$2"
+  local security_level="$3"
+
+  if ! jq -e . "$raw" >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! jq -e '.fields.issuetype.name | type == "string" and length > 0' "$raw" >/dev/null 2>&1; then
+    return 1
+  fi
+  local sec_kind
+  sec_kind=$(jq -r '.fields.security | type' "$raw" 2>/dev/null || echo "invalid")
+  case "$sec_kind" in
+    null)
+      printf -v "$issue_type" '%s' "$(jq -r '.fields.issuetype.name' "$raw")"
+      printf -v "$security_level" '%s' ""
+      return 0
+      ;;
+    object)
+      if ! jq -e '.fields.security.name | type == "string" and length > 0' "$raw" >/dev/null 2>&1; then
+        return 1
+      fi
+      printf -v "$issue_type" '%s' "$(jq -r '.fields.issuetype.name' "$raw")"
+      printf -v "$security_level" '%s' "$(jq -r '.fields.security.name' "$raw")"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+fetch_jira_embargo_raw() {
+  local raw="$1"
+  local fields="${2:-issuetype,security}"
+  local http_code
+  http_code=$(curl -sS -w "%{http_code}" -o "$raw" \
+    -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+    "https://redhat.atlassian.net/rest/api/2/issue/${ISSUE_KEY}?fields=${fields}") || return 1
+  [[ "$http_code" == "200" ]]
+}
+
+check_embargo_or_skip() {
+  local raw=".output/bug-${ISSUE_KEY}-raw.json"
+  if ! fetch_jira_embargo_raw "$raw" "issuetype,security,summary,components,versions,description,priority"; then
+    write_jira_validation_failed_outcome "Jira fetch failed or non-200 response"
+    echo "Skipped: could not fetch Jira issue for embargo check (fail closed)."
+    exit 0
+  fi
+  local issue_type security_level
+  if ! load_jira_embargo_fields "$raw" issue_type security_level; then
+    write_jira_validation_failed_outcome "missing or invalid issuetype/security fields"
+    echo "Skipped: could not validate Jira embargo fields (fail closed)."
+    exit 0
+  fi
+  if [[ "$issue_type" == "Embargoed Bug" ]]; then
+    write_skipped_embargo_outcome "Embargoed Bug"
+    echo "Skipped: issuetype Embargoed Bug (human handling only)."
+    exit 0
+  fi
+  if [[ "$security_level" == "Embargoed Security Issue" ]]; then
+    write_skipped_embargo_outcome "Embargoed Security Issue"
+    echo "Skipped: security level Embargoed Security Issue (human handling only)."
+    exit 0
+  fi
+}
+
 # Step 1: Analyze bug
 echo "📊 Step 1/7: Analyzing bug reproducibility..."
 echo ""
 
-# Simple inline analysis (full version should use sfa-bug-analyze skill)
-curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
-  "https://redhat.atlassian.net/rest/api/2/issue/$ISSUE_KEY" \
-  > .output/bug-${ISSUE_KEY}-raw.json
+check_embargo_or_skip
 
 SUMMARY=$(jq -r '.fields.summary' .output/bug-${ISSUE_KEY}-raw.json)
 COMPONENT=$(jq -r '.fields.components[0].name // "Unknown"' .output/bug-${ISSUE_KEY}-raw.json)
@@ -106,6 +197,9 @@ fi
 echo "  Target version: $ACM_VERSION"
 echo "✅ Version determined"
 echo ""
+
+# Guard before provisioning
+check_embargo_or_skip
 
 # Step 3: Check cluster connectivity
 echo "🔌 Step 3/7: Checking cluster connectivity..."
@@ -234,6 +328,28 @@ echo "✅ Evidence captured to .output/evidence-${ISSUE_KEY}/"
 echo ""
 
 # Step 7: Post results to Jira
+if [[ "$POST_RESULTS" == "true" ]]; then
+  if ! fetch_jira_embargo_raw ".output/bug-${ISSUE_KEY}-raw.json" "issuetype,security"; then
+    write_jira_validation_failed_outcome "Jira fetch failed or non-200 response"
+    echo "Skipped Jira post: could not fetch issue for embargo check (fail closed)."
+    POST_RESULTS="false"
+  else
+    issue_type=""
+    security_level=""
+    if ! load_jira_embargo_fields ".output/bug-${ISSUE_KEY}-raw.json" issue_type security_level; then
+      write_jira_validation_failed_outcome "missing or invalid issuetype/security fields"
+      echo "Skipped Jira post: could not validate embargo fields (fail closed)."
+      POST_RESULTS="false"
+    elif [[ "$issue_type" == "Embargoed Bug" || "$security_level" == "Embargoed Security Issue" ]]; then
+      signal="$issue_type"
+      [[ "$security_level" == "Embargoed Security Issue" ]] && signal="$security_level"
+      write_skipped_embargo_outcome "$signal"
+      echo "Skipped Jira post: embargoed issue (human handling only)."
+      POST_RESULTS="false"
+    fi
+  fi
+fi
+
 if [[ "$POST_RESULTS" == "true" ]]; then
   echo "📤 Step 7/7: Posting results to Jira..."
   echo ""

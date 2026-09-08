@@ -62,8 +62,10 @@ project = ACM AND assignee IN ("email1@redhat.com", "email2@redhat.com", ...) AN
 ### Bugs by Severity
 
 ```
-project = ACM AND component = "Server Foundation" AND issuetype = Bug AND status NOT IN (Closed, Resolved) ORDER BY cf[10840] ASC
+project = ACM AND component = "Server Foundation" AND issuetype = Bug AND issuetype != "Embargoed Bug" AND security != "Embargoed Security Issue" AND status NOT IN (Closed, Resolved) ORDER BY cf[10840] ASC
 ```
+
+> Embargoed issues: skip when issuetype is **Embargoed Bug** or security level is **Embargoed Security Issue** (Jira API field `security`).
 
 ### Recently Created (last 7 days)
 
