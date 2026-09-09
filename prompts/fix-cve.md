@@ -703,17 +703,57 @@ For each **In Progress** issue:
      ```
      Pick the PR whose `baseRefName` matches the issue target branch
 
-4. **Verify merge** — `gh pr view <url> --json state,mergedAt,url` — proceed **only**
-   when `state` is `MERGED`
+4. **Verify merge** — capture merge metadata with `gh`:
 
-5. **Record then close (order mandatory):**
-   - **First** append to `remediation.json` with `closed_this_run: true` (and mirror in
-     `run_meta.json` → `jira_closed_this_run` — see §6.6). Slack *Closed this run*
-     reports **only** rows with `closed_this_run: true` from this run.
+   ```bash
+   gh pr view <url> --json state,mergedAt,url,mergeCommit,baseRefName
+   ```
+
+   Proceed **only** when `state` is `MERGED`. Record `mergeCommit.oid` as the Konflux
+   image tag revision (merge commit SHA).
+
+5. **Resolve Fix Version (required before Close)** — map the issue to Konflux image metadata
+   (same mapping as toolchain verify):
+
+   - `pscomponent` + stream from issue summary/labels → `repo`, `branch`, `dockerfile` via
+     `map-image-to-dockerfile.py` (must match the merged PR's `baseRefName`)
+   - Stream from summary bracket (`[mce-2.8]` → `mce-2.8`) — required for ACM vs MCE
+     Fix Version naming
+
+   ```bash
+   python3 .claude/skills/sfa-cve-toolchain-verify/verify-konflux-image-go.py \
+     --fix-version-only \
+     --repo stolostron/ocm --branch backplane-2.8 \
+     --dockerfile build/Dockerfile.work.rhtap \
+     --revision <merge_commit_sha> \
+     --stream mce-2.8 \
+     --issue-key ACM-35352
+   ```
+
+   The helper reads the Konflux image `version` label (e.g. `v2.8.10`) and maps it with
+   the stream to Jira Fix Version (e.g. `MCE 2.8.10`). Same rules as
+   [sfa-cve-toolchain-verify](../.claude/skills/sfa-cve-toolchain-verify/SKILL.md) Step 4.
+
+   | Result | Action |
+   |--------|--------|
+   | `ok: true`, `fix_version` set | Proceed to step 6 |
+   | Image missing on Quay (PipelineRun still running) | MCP `add_comment` "waiting for Konflux image after merge"; record `action: failed`; **do not Close** |
+   | `fix_version: null` (missing label or unrecognized stream) | MCP `add_comment` with evidence; record `action: failed`; **do not Close** — do not guess MCE/ACM |
+
+6. **Record then close (order mandatory):**
+
+   Jira **rejects Close without Fix Version** — set Fix Version **before** transitioning.
+
+   - **First** append to `remediation.json` with `closed_this_run: true`, `fix_version`,
+     `product_ver`, `image`, and `merge_commit` (and mirror in `run_meta.json` →
+     `jira_closed_this_run` — see §6.6). Slack *Closed this run* reports **only** rows
+     with `closed_this_run: true` from this run.
+   - MCP `update_issue` with `fix_versions: ["MCE 2.8.10"]` (exact name from step 5)
    - MCP `add_comment` (wiki markup):
      - `CVE Remediation: PR merged`
      - Merged PR URL and `mergedAt`
-     - One-line fix summary (repo, branch, version bump)
+     - Konflux image + `product_ver` label + derived Fix Version
+     - One-line fix summary (repo, branch, module bump)
      - Footer `_— server-foundation-agent_`
    - MCP `transition_issue` toward **Closed** (multi-step OK):
      - Shortest path from **In Progress** through Review / Testing / Resolved to **Closed**
@@ -731,6 +771,10 @@ For each **In Progress** issue:
        "pr_url": "https://github.com/stolostron/ocm/pull/767",
        "pr_state": "MERGED",
        "merged_at": "2026-06-22T20:19:32Z",
+       "merge_commit": "abc123…",
+       "image": "quay.io/redhat-user-workloads/crt-redhat-acm-tenant/work-mce-28:abc123…",
+       "product_ver": "v2.8.10",
+       "fix_version": "MCE 2.8.10",
        "notes": "ocm#767 merged: golang.org/x/net v0.53.0 → v0.56.0 on backplane-2.8"
      }
      ```
@@ -744,8 +788,9 @@ bearing a `CVE Remediation: PR merged` agent comment.
 **Guardrails:**
 
 - Close **only** when `gh` confirms `MERGED` for a PR that fixes this issue's
-  repo/branch/CVE
+  repo/branch/CVE **and** step 5 yields a non-null `fix_version`
 - Do **not** close on open/draft PRs, unmerged closed PRs, or branch version alone
+- Do **not** close without Fix Version — Jira may revert or block the transition
 - Do **not** close ✅ Not Vulnerable issues automatically (§6.3) — only ❌/⚠️ with merged
   fix PR, or §6.2 Not Applicable
 
@@ -898,8 +943,9 @@ Report in session output:
 - Use curl REST for comments on vulnerability issues
 - Mark draft PRs ready for review or merge them
 - Close vulnerability issues unless: (a) **Not Applicable** with evidence (§6.2),
-  (b) linked fix PR is **MERGED** per `gh` (§6.5), or (c) toolchain verify with
-  `go version -m` ≥ `min_go` + Fix Version (§6.0 / `sfa-cve-toolchain-verify`)
+  (b) linked fix PR is **MERGED** per `gh` **and** Fix Version resolved from Konflux image
+  (§6.5), or (c) toolchain verify with `go version -m` ≥ `min_go` + Fix Version
+  (§6.0 / `sfa-cve-toolchain-verify`)
 - Open more than one PR per `(repo, branch, CVE)` per run
 - Hand-craft a Slack digest that omits clickable `https://github.com/.../pull/N` URLs
   (always use `generate_slack_payload.py` + `send_to_slack.sh` / MCP `send_payload`)
