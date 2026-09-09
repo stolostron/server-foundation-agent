@@ -369,11 +369,13 @@ Write `.output/cve-analysis/remediation.json` — array of action records:
   "branch": "backplane-2.8",
   "impact": "Not Applicable",
   "action": "closed",
+  "resolution": "Not a Bug",
+  "vex_justification": "Vulnerable Code not Present",
   "pr_url": null,
   "pr_state": null,
   "is_draft": null,
   "merged_at": null,
-  "notes": "go mod why shows ssh package not needed",
+  "notes": "golang.org/x/crypto/ssh not imported; go mod why → bcrypt only",
   "closed_this_run": true
 }
 ```
@@ -484,23 +486,54 @@ comments.
 Then execute §6.2–§6.5 for those groups. Prefer opening draft PRs (§6.4) over writing
 “Draft PRs needed” in the summary.
 
-### 6.2 Not Applicable → close Jira
+### 6.2 Not Applicable → close Jira (VEX disposition)
 
 When deep analysis classifies the issue's repo/branch as **➖ Not Applicable**:
 
 1. MCP `add_comment` on the vulnerability issue (skip if comment already contains
    `CVE Remediation: Not Applicable` and `_— server-foundation-agent_` unless
    `FORCE_REANALYSIS`):
-   - Evidence: `go mod why` output, grep results, why the vulnerable API is unused
-   - Statement: issue closed as not applicable to this component/branch
-2. MCP `transition_issue`:
-   - If status is New/To Do → try `In Progress` first when available
-   - Then transition to **Closed** (or **Resolve** then **Close** if the workflow
-     requires two steps)
-   - If transition fails, record `action: failed` with error; do **not** retry blindly
-3. **First** record each closed issue in `remediation.json` with `action: closed`,
-   `closed_this_run: true`, and a `notes` rationale; mirror in `run_meta.json` →
-   `jira_closed_this_run`. **Then** transition.
+   - Evidence: `go mod why` output, grep results, govulncheck (0 affected), why the
+     vulnerable package/symbol is unused
+   - Statement: closing as Not a Bug with VEX justification (see table below)
+2. **Close with Resolution + VEX** — do **not** use bare MCP `transition_issue` to
+   Closed (it omits required transition fields and may set resolution **Done** or
+   trigger Fix Version automation). Run:
+
+   ```bash
+   python3 .claude/skills/sfa-cve-analysis/close-cve-not-applicable.py \
+     --issue-key ACM-12345
+   ```
+
+   Batch (after building a list from remediation plan):
+
+   ```bash
+   python3 .claude/skills/sfa-cve-analysis/close-cve-not-applicable.py \
+     --from-json .output/cve-analysis/na-close.json
+   ```
+
+   `na-close.json` example: `[{"issue_key": "ACM-12345", "vex_justification": "Vulnerable Code not Present"}]`
+
+3. **VEX Justification** (Jira field `VEX Justification` / `customfield_10873`):
+
+   | N/A evidence | VEX value |
+   |--------------|-----------|
+   | Vulnerable package path **not imported** / not in build graph (default) | `Vulnerable Code not Present` |
+   | Module present in `go.mod` but vulnerable subpackage/symbol **not reachable** | `Vulnerable Code not in Execute Path` |
+   | Component/image not shipped in this product stream | `Component not Present` |
+
+   Default for ➖ Not Applicable (e.g. `golang.org/x/crypto/ssh` not imported, only
+   `x/crypto/bcrypt` via helm): **`Vulnerable Code not Present`**.
+
+   **Resolution:** always **`Not a Bug`** (exact Jira name).
+
+4. Record each closed issue in `remediation.json` with `action: closed`,
+   `closed_this_run: true`, `resolution: "Not a Bug"`, `vex_justification`, and
+   `notes`; mirror in `run_meta.json` → `jira_closed_this_run`. Run the helper
+   **after** the comment is posted.
+
+5. If the helper exits non-zero, record `action: failed` with stderr/JSON error; do
+   **not** retry blindly.
 
 **Guardrail:** close **only** when classification is Not Applicable with documented
 evidence in the comment. Never close ❌ Vulnerable or ⚠️ Potentially Vulnerable issues.
