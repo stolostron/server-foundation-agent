@@ -38,8 +38,9 @@ required (REST often returns 404 on ProsSec issues).
 | `workspace/` | Writable worktrees for CVE fixes (`sfa-workspace-clone` skill) |
 
 **GitHub:** `gh` for draft PRs. Commits: Conventional Commits + `Signed-off-by` +
-`Co-authored-by: server-foundation-agent <sfa-bot@redhat.com>`. Label `sfa-assisted`
-after PR create when the label exists (see `prompts/_sfa-conventions.md`).
+`Co-authored-by: server-foundation-agent <sfa-bot@redhat.com>`. After PR create, add
+labels `sfa-assisted` and `acknowledge-security-fixes-only` when they exist on the
+target repo (see `prompts/_sfa-conventions.md` and Phase 6.4 step 7).
 
 **Slack:** prefer Slack MCP (`send_payload`); fallback `SLACK_WEBHOOK_URL` +
 `workflows/fix-cve/generate_slack_payload.py` +
@@ -609,11 +610,15 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
    *Created with [server-foundation-agent](https://github.com/stolostron/server-foundation-agent)*
    EOF
    )"
-   gh pr edit <PR-NUMBER> --repo <org/repo> --add-label "sfa-assisted"
+   gh pr edit <PR-NUMBER> --repo <org/repo> \
+     --add-label "sfa-assisted" \
+     --add-label "acknowledge-security-fixes-only"
    gh pr view <PR-NUMBER> --repo <org/repo> --json state,isDraft,mergedAt,url,title
    ```
-   If the label does not exist on the target repo, note in the run summary; the draft PR
-   is still valid.
+   `acknowledge-security-fixes-only` is required for Tide auto-merge on stolostron
+   backplane/release branches (see `release` prow tide config). If either label is
+   undefined on the target repo, note which failed in the run summary; the draft PR is
+   still valid.
 8. **Jira updates** for each linked vulnerability issue:
    - MCP `add_comment` with PR URL, fix summary, and signature footer
    - MCP `update_issue` — set `git_pull_requests` to the PR URL when the field is
@@ -732,7 +737,7 @@ Write `.output/cve-analysis/run_meta.json` before Phase 7 (counts for Slack):
   "issues_found": 15,
   "cves_processed": 2,
   "comments_posted": 17,
-  "failures": ["sfa-assisted label not found on target repos"],
+  "failures": ["acknowledge-security-fixes-only label not found on stolostron/cluster-proxy"],
   "follow_up": "Optional non-PR notes only (e.g. z-stream backport branches)",
   "jira_closed_this_run": [
     {
