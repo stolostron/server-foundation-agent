@@ -22,7 +22,7 @@ Load these on-demand based on the task at hand:
 | [API Reference](jira/api-reference.md) | `docs/jira/api-reference.md` | REST API endpoints, authentication, curl examples |
 | [Templates](jira/templates.md) | `docs/jira/templates.md` | Issue creation templates (Bug, Epic, Story, Task, Vulnerability) |
 | [Automated bug fix (developer guide)](automated-bug-fix-developer-guide.md) | `docs/automated-bug-fix-developer-guide.md` | End-to-end Jira → draft PR → merge flow; human gates and labels |
-| [Automated CVE fix (developer guide)](automated-cve-fix-developer-guide.md) | `docs/automated-cve-fix-developer-guide.md` | ProsSec CVE flow: analysis, draft PRs, auto-close |
+| [Automated CVE fix (developer guide)](automated-cve-fix-developer-guide.md) | `docs/automated-cve-fix-developer-guide.md` | ProsSec CVE flow: analysis, ready-for-review PRs + `/ok-to-test`, auto-close |
 | [Agent automation](../prompts/README.md#jira-automation-model) | `prompts/README.md` | Scheduled triage + fix pipeline, labels, grooming (operator reference) |
 
 ## Bootstrap Sequence

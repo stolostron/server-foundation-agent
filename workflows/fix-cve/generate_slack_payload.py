@@ -177,7 +177,7 @@ def _derive_follow_up_lines(buckets: dict[str, list[dict[str, Any]]]) -> list[st
     for entry in buckets["awaiting_approval"]:
         label = pr_short_label(entry.get("repo", ""), entry.get("pr_number"))
         url = entry["pr_url"]
-        lines.append(f"• <{url}|{label}> — `/approve` + `/lgtm` when CI is green")
+        lines.append(f"• <{url}|{label}> — `/ok-to-test` if `needs-ok-to-test` is still set; `/approve` + `/lgtm` when CI is green")
 
     for entry in buckets["closed"]:
         label = pr_short_label(entry.get("repo", ""), entry.get("pr_number"))

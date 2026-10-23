@@ -117,9 +117,11 @@ Query agent PRs: `label:sfa-assisted is:pr org:stolostron`
 
 ### Agent PR human gate
 
-Pipeline PRs stay **draft** until a developer marks them ready. Bot PRs on stolostron
-repos need **`/ok-to-test`** while `needs-ok-to-test` is set. Non-draft PRs need
-**approval** when `reviewDecision` is `REVIEW_REQUIRED`.
+Bug-pipeline PRs stay **draft** until a developer marks them ready. CVE fix PRs
+(`fix-cve`) are created **ready for review** and the agent comments **`/ok-to-test`**
+itself; if `needs-ok-to-test` persists (Prow does not trust the bot), a developer
+re-comments it. Non-draft PRs need **approval** when `reviewDecision` is
+`REVIEW_REQUIRED`.
 
 Scheduled Slack digest: [agent-pr-action-needed.md](agent-pr-action-needed.md).
 

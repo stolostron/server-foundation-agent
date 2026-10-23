@@ -98,6 +98,34 @@ def test_fix_version_from_label_no_mce_default():
     assert _mod.fix_version_from_label("v2.11.5", "") is None
 
 
+def test_parse_stream_from_text():
+    assert _mod.parse_stream_from_text("[mce-2.8] ocm — CVE-2026-39821") == "mce-2.8"
+    assert _mod.parse_stream_from_text("[rhacm-2.16] work") == "rhacm-2.16"
+    assert _mod.parse_stream_from_text("no stream here") is None
+
+
+def test_resolve_stream_explicit():
+    stream, source = _mod.resolve_stream("mce-2.11", None)
+    assert stream == "mce-2.11"
+    assert source == "explicit"
+
+
+def test_inspect_image_labels_rejects_disallowed_ref():
+    result = _mod.inspect_image_labels("evil.example/x:deadbeef", stream="mce-2.11")
+    assert result["ok"] is False
+    assert "not allowed" in result["error"]
+
+
+def test_inspect_image_labels_requires_stream():
+    good = (
+        "quay.io/redhat-user-workloads/crt-redhat-acm-tenant/"
+        "work-mce-211:6031040741660bca3ae07df68240cae9c26af5c6"
+    )
+    result = _mod.inspect_image_labels(good, stream=None)
+    assert result["ok"] is False
+    assert "stream required" in result["error"]
+
+
 def test_validate_jira_issue_key_allowlist():
     assert _mod.validate_jira_issue_key("ACM-37547") == "ACM-37547"
     assert _mod.validate_jira_issue_key("acm-40097") == "ACM-40097"

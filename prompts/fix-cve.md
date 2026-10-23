@@ -3,7 +3,8 @@
 Monitor Server Foundation ProsSec vulnerability issues, **classify each CVE as Go
 toolchain/stdlib vs module**, generate the CVE **summary/inventory** (repos + issue
 table — keep), post findings to Jira **Vulnerability** issues (do **not** create
-per-CVE tracking Tasks), open **draft PRs** for module CVEs, trigger **Konflux
+per-CVE tracking Tasks), open **ready-for-review PRs** for module CVEs (with an
+automatic `/ok-to-test` comment to start Prow CI), trigger **Konflux
 rebuilds** for toolchain CVEs, and **close** vulnerability issues classified as Not
 Applicable (or after verified rebuild / merged PR).
 
@@ -37,7 +38,8 @@ required (REST often returns 404 on ProsSec issues).
 | `repos/` | Read-only reference (`./repos/sync-repos.sh`) |
 | `workspace/` | Writable worktrees for CVE fixes (`sfa-workspace-clone` skill) |
 
-**GitHub:** `gh` for draft PRs. Commits: Conventional Commits + `Signed-off-by` +
+**GitHub:** `gh` for CVE fix PRs — created **ready for review** (never draft), with an
+automatic `/ok-to-test` comment (see Phase 6.4 step 7). Commits: Conventional Commits + `Signed-off-by` +
 `Co-authored-by: server-foundation-agent <sfa-bot@redhat.com>`. After PR create, add
 labels `sfa-assisted` and `acknowledge-security-fixes-only` when they exist on the
 target repo (see `prompts/_sfa-conventions.md` and Phase 6.4 step 7).
@@ -89,7 +91,7 @@ post comments only on issues missing the signature (do not duplicate on already-
 issues).
 
 **Dedup does NOT skip Phase 6 remediation.** CVEs that already have analysis still need
-draft PRs, Not Applicable closes, and merged-PR closes when open vulnerability issues
+fix PRs, Not Applicable closes, and merged-PR closes when open vulnerability issues
 remain. Put analysis-skipped CVE IDs in `.output/cve-analysis/cve_remediate.json` (see
 Phase 2) and still run Phase 6 for them.
 
@@ -120,7 +122,7 @@ Collect → Group by CVE → Classify (toolchain vs module) → CVE summary (no 
   → Deep analysis → Jira comments (Vulnerability only) → Remediation → Slack → Summary
 ```
 
-**Critical:** classify remediation path **before** deep module analysis or draft PRs.
+**Critical:** classify remediation path **before** deep module analysis or fix PRs.
 Do not open `go.mod` bump PRs for toolchain/stdlib CVEs.
 **Stop only** creating per-CVE tracking Tasks; **keep** the CVE summary content,
 analysis, Vulnerability comments, remediation, and Slack.
@@ -170,7 +172,7 @@ analysis, Vulnerability comments, remediation, and Slack.
 ## Phase 2.5: Classify remediation path (REQUIRED)
 
 For **every** CVE in `cve_to_process.json`, classify **before** Phase 4 module deep
-analysis or Phase 6 draft PRs.
+analysis or Phase 6 fix PRs.
 
 Write `.output/cve-analysis/classification-{cve_id}.json`:
 
@@ -217,8 +219,8 @@ Do **not** use “majority of signals” heuristics — follow the table above.
 
 | `path` | Phases 3–5 | Phase 6 |
 |--------|------------|---------|
-| `toolchain` | CVE summary + short analysis comment on each Vulnerability (toolchain, `min_go`, no `go get`) | §6.0 Konflux rebuild (`sfa-cve-toolchain`); skip §6.4 draft PRs |
-| `module` | CVE summary + full deep analysis as today | §6.2–§6.5 (Not Applicable / already fixed / draft PR / close on merge) |
+| `toolchain` | CVE summary + short analysis comment on each Vulnerability (toolchain, `min_go`, no `go get`) | §6.0 Konflux rebuild (`sfa-cve-toolchain`); skip §6.4 fix PRs |
+| `module` | CVE summary + full deep analysis as today | §6.2–§6.5 (Not Applicable / already fixed / fix PR / close on merge) |
 
 ## Phase 3: CVE summary (no tracking Task)
 
@@ -275,7 +277,7 @@ no primary module path, update classification to `toolchain` before continuing.
 `mkdir -p`). OpenCode rejects `external_directory (/tmp/*)`; never `cd /tmp` or
 `git clone` into `/tmp`.
 
-For writable CVE *fix* worktrees (draft PRs), use `sfa-workspace-clone` → `workspace/`
+For writable CVE *fix* worktrees (fix PRs), use `sfa-workspace-clone` → `workspace/`
 instead of this analysis clone tree.
 
 **Repositories** — derive from vulnerability issues for this CVE (via script output
@@ -343,7 +345,7 @@ Run after Phase 5 (or after Phase 2 when every CVE was analysis-dedup'd) unless
 `SKIP_REMEDIATION` is set. Non-interactive — do not ask the user.
 
 **Scope:** remediate **every** CVE in `cve_remediate.json`, not only `cve_to_process.json`.
-Do **not** list draft PRs as “human follow-up” when §6.4 can open them this run.
+Do **not** list fix PRs as “human follow-up” when §6.4 can open them this run.
 Dedup of analysis is not a reason to skip opening PRs or closing Not Applicable /
 merged-PR issues.
 
@@ -433,11 +435,11 @@ When a row has `pr_url`, also record live GitHub fields from `gh pr view` (see P
 state helpers below): `pr_state` (`OPEN` / `MERGED` / `CLOSED`), `is_draft`, `merged_at`.
 Phase 7 re-fetches these fields before Slack; stale merged PRs must not appear as drafts.
 
-### 6.0 Toolchain CVEs → Konflux rebuild (not draft PRs)
+### 6.0 Toolchain CVEs → Konflux rebuild (not module bump PRs)
 
 When `classification-{cve_id}.json` has `"path": "toolchain"`:
 
-1. **Do not** open `go.mod` / vendor bump PRs (close any mistaken open draft for this
+1. **Do not** open `go.mod` / vendor bump PRs (close any mistaken open module bump for this
    CVE with a comment pointing at toolchain remediation).
 2. Map images → `(repo, branch)` rebuild groups via `map-image-to-dockerfile.py`.
 3. **Latest-image pre-check (required before rebuild):** For each open Vulnerability, run
@@ -481,11 +483,11 @@ For each CVE in `cve_remediate.json`, map each **active** vulnerability issue to
   (when analysis was dedup'd this run)
 
 **Group fixes:** toolchain → one `/retest branch:<branch>` per `(repo, branch)`; module → one
-draft PR per `(repo, branch, CVE)`. Link all related vulnerability issue keys in
+fix PR per `(repo, branch, CVE)`. Link all related vulnerability issue keys in
 comments.
 
-Then execute §6.2–§6.5 for those groups. Prefer opening draft PRs (§6.4) over writing
-“Draft PRs needed” in the summary.
+Then execute §6.2–§6.5 for those groups. Prefer opening fix PRs (§6.4) over writing
+“Fix PRs needed” in the summary.
 
 ### 6.2 Not Applicable → close Jira (VEX disposition)
 
@@ -547,7 +549,7 @@ When classification is **✅ Not Vulnerable** (installed version ≥ fix version
 - Record `action: skipped_already_fixed` in `remediation.json`
 - Do **not** close automatically (human/QE may still want scan ticket cleanup)
 
-### 6.4 Vulnerable / Potentially Vulnerable → draft PR (module path only)
+### 6.4 Vulnerable / Potentially Vulnerable → fix PR ready for review (module path only)
 
 **Skip this section when classification is `toolchain`** (use §6.0).
 
@@ -566,12 +568,13 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
 ```
 
 - If `state` is `MERGED` → record `action: pr_merged` (not `skipped_existing_pr`);
-  include `merged_at`; do **not** list as needing draft/approval follow-up
+  include `merged_at`; do **not** list as needing review/approval follow-up
 - If `state` is `CLOSED` (unmerged) → record `action: pr_closed`; open a new PR if still
   vulnerable
-- If `state` is `OPEN` and `isDraft` is `true` → `skipped_existing_pr` or `pr_opened`
+- If `state` is `OPEN` and `isDraft` is `true` (legacy draft PR) → `skipped_existing_pr`
+  or `pr_opened`; mark "make ready for review" as a human follow-up
 - If `state` is `OPEN` and `isDraft` is `false` → same actions; Slack reports as
-  *ready for review*, not draft
+  *ready for review*
 
 1. **Dedup PR:** use `gh pr list --state open` on the repo with title containing
    `{cve_id}`; verify with `gh pr view --json state,isDraft,mergedAt`. Do **not** treat
@@ -620,9 +623,9 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
    )"
    git push origin HEAD
    ```
-7. **Draft PR:**
+7. **PR (ready for review) + `/ok-to-test`:**
    ```bash
-   gh pr create --draft --repo <org/repo> \
+   gh pr create --repo <org/repo> \
      --title "<CVE-ID>: bump <module> on <branch>" \
      --body "$(cat <<'EOF'
    ## CVE
@@ -646,19 +649,28 @@ gh pr view <number> --repo <org/repo> --json state,isDraft,mergedAt,url,title
    gh pr edit <PR-NUMBER> --repo <org/repo> \
      --add-label "sfa-assisted" \
      --add-label "acknowledge-security-fixes-only"
-   gh pr view <PR-NUMBER> --repo <org/repo> --json state,isDraft,mergedAt,url,title
+   # Start Prow CI — bot PRs get needs-ok-to-test until /ok-to-test is posted
+   gh pr comment <PR-NUMBER> --repo <org/repo> --body "/ok-to-test"
+   gh pr view <PR-NUMBER> --repo <org/repo> --json state,isDraft,mergedAt,url,title,labels
    ```
+   CVE fix PRs are created **ready for review** — do **not** pass `--draft`. Immediately
+   after creating the PR and adding labels, comment **`/ok-to-test`** once to start Prow
+   CI, then verify with `gh pr view` that the `needs-ok-to-test` label was removed.
+   Prow honors `/ok-to-test` only from trusted org members (or apps trusted by the prow
+   config). If `needs-ok-to-test` is still present on the re-check, the bot comment was
+   not accepted — record it as a human follow-up ("comment `/ok-to-test`") in the run
+   summary and remediation notes; do **not** re-comment.
    `acknowledge-security-fixes-only` is required for Tide auto-merge on stolostron
    backplane/release branches (see `release` prow tide config). If either label is
-   undefined on the target repo, note which failed in the run summary; the draft PR is
+   undefined on the target repo, note which failed in the run summary; the PR is
    still valid.
 8. **Jira updates** for each linked vulnerability issue:
    - MCP `add_comment` with PR URL, fix summary, and signature footer
    - MCP `update_issue` — set `git_pull_requests` to the PR URL when the field is
      supported (best effort); re-verify with `gh pr view` on later runs — merged PRs in
      Jira must not block new fixes
-   - Leave status at **In Progress** after opening a draft PR — do **not** transition to
-     Review (humans move to Review after marking the PR ready for review)
+   - Leave status at **In Progress** after opening the PR — do **not** transition to
+     Review (humans move to Review after approving the PR)
 9. Record `action: pr_opened` with `pr_url`, `pr_state`, `is_draft`, and `merged_at` in
     `remediation.json`
 
@@ -703,17 +715,57 @@ For each **In Progress** issue:
      ```
      Pick the PR whose `baseRefName` matches the issue target branch
 
-4. **Verify merge** — `gh pr view <url> --json state,mergedAt,url` — proceed **only**
-   when `state` is `MERGED`
+4. **Verify merge** — capture merge metadata with `gh`:
 
-5. **Record then close (order mandatory):**
-   - **First** append to `remediation.json` with `closed_this_run: true` (and mirror in
-     `run_meta.json` → `jira_closed_this_run` — see §6.6). Slack *Closed this run*
-     reports **only** rows with `closed_this_run: true` from this run.
+   ```bash
+   gh pr view <url> --json state,mergedAt,url,mergeCommit,baseRefName
+   ```
+
+   Proceed **only** when `state` is `MERGED`. Record `mergeCommit.oid` as the Konflux
+   image tag revision (merge commit SHA).
+
+5. **Resolve Fix Version (required before Close)** — map the issue to Konflux image metadata
+   (same mapping as toolchain verify):
+
+   - `pscomponent` + stream from issue summary/labels → `repo`, `branch`, `dockerfile` via
+     `map-image-to-dockerfile.py` (must match the merged PR's `baseRefName`)
+   - Stream from summary bracket (`[mce-2.8]` → `mce-2.8`) — required for ACM vs MCE
+     Fix Version naming
+
+   ```bash
+   python3 .claude/skills/sfa-cve-toolchain-verify/verify-konflux-image-go.py \
+     --fix-version-only \
+     --repo stolostron/ocm --branch backplane-2.8 \
+     --dockerfile build/Dockerfile.work.rhtap \
+     --revision <merge_commit_sha> \
+     --stream mce-2.8 \
+     --issue-key ACM-35352
+   ```
+
+   The helper reads the Konflux image `version` label (e.g. `v2.8.10`) and maps it with
+   the stream to Jira Fix Version (e.g. `MCE 2.8.10`). Same rules as
+   [sfa-cve-toolchain-verify](../.claude/skills/sfa-cve-toolchain-verify/SKILL.md) Step 4.
+
+   | Result | Action |
+   |--------|--------|
+   | `ok: true`, `fix_version` set | Proceed to step 6 |
+   | Image missing on Quay (PipelineRun still running) | MCP `add_comment` "waiting for Konflux image after merge"; record `action: failed`; **do not Close** |
+   | `fix_version: null` (missing label or unrecognized stream) | MCP `add_comment` with evidence; record `action: failed`; **do not Close** — do not guess MCE/ACM |
+
+6. **Record then close (order mandatory):**
+
+   Jira **rejects Close without Fix Version** — set Fix Version **before** transitioning.
+
+   - **First** append to `remediation.json` with `closed_this_run: true`, `fix_version`,
+     `product_ver`, `image`, and `merge_commit` (and mirror in `run_meta.json` →
+     `jira_closed_this_run` — see §6.6). Slack *Closed this run* reports **only** rows
+     with `closed_this_run: true` from this run.
+   - MCP `update_issue` with `fix_versions: ["MCE 2.8.10"]` (exact name from step 5)
    - MCP `add_comment` (wiki markup):
      - `CVE Remediation: PR merged`
      - Merged PR URL and `mergedAt`
-     - One-line fix summary (repo, branch, version bump)
+     - Konflux image + `product_ver` label + derived Fix Version
+     - One-line fix summary (repo, branch, module bump)
      - Footer `_— server-foundation-agent_`
    - MCP `transition_issue` toward **Closed** (multi-step OK):
      - Shortest path from **In Progress** through Review / Testing / Resolved to **Closed**
@@ -731,6 +783,10 @@ For each **In Progress** issue:
        "pr_url": "https://github.com/stolostron/ocm/pull/767",
        "pr_state": "MERGED",
        "merged_at": "2026-06-22T20:19:32Z",
+       "merge_commit": "abc123…",
+       "image": "quay.io/redhat-user-workloads/crt-redhat-acm-tenant/work-mce-28:abc123…",
+       "product_ver": "v2.8.10",
+       "fix_version": "MCE 2.8.10",
        "notes": "ocm#767 merged: golang.org/x/net v0.53.0 → v0.56.0 on backplane-2.8"
      }
      ```
@@ -744,8 +800,9 @@ bearing a `CVE Remediation: PR merged` agent comment.
 **Guardrails:**
 
 - Close **only** when `gh` confirms `MERGED` for a PR that fixes this issue's
-  repo/branch/CVE
+  repo/branch/CVE **and** step 5 yields a non-null `fix_version`
 - Do **not** close on open/draft PRs, unmerged closed PRs, or branch version alone
+- Do **not** close without Fix Version — Jira may revert or block the transition
 - Do **not** close ✅ Not Vulnerable issues automatically (§6.3) — only ❌/⚠️ with merged
   fix PR, or §6.2 Not Applicable
 
@@ -866,16 +923,16 @@ Report in session output:
 - Vulnerability issues found / CVEs grouped / CVEs analysis-skipped (dedup) vs remediated
 - Deep analyses completed (this run)
 - Jira comments posted (per Vulnerability issue counts)
-- **Remediation:** PRs by state (draft / ready / merged; table: PR URL, repo, branch,
-  linked keys) — include PRs opened this run for analysis-dedup'd CVEs
+- **Remediation:** PRs by state (ready / merged / draft — legacy; table: PR URL, repo,
+  branch, linked keys) — include PRs opened this run for analysis-dedup'd CVEs
 - **Remediation:** vulnerability issues closed as Not Applicable (table: key, rationale)
 - **Remediation:** vulnerability issues closed because fix PR merged (table: key, PR URL)
 - Remediation skipped / failed counts from `remediation.json`
 - **Slack:** sent / skipped / failed (with reason)
 - Failures (assignee, MCP, clone, missing branches, PR push, Jira transition)
 - Recommended human follow-ups **only** for work the agent cannot do (Go toolchain /
-  Dockerfile bumps, mark PRs ready, `/ok-to-test`) — **not** for draft dependency PRs
-  that §6.4 should have opened
+  Dockerfile bumps, `/ok-to-test` when the bot comment did not clear `needs-ok-to-test`,
+  review/approve) — **not** for dependency PRs that §6.4 should have opened
 
 ## instruction_prompt overrides
 
@@ -896,10 +953,12 @@ Report in session output:
 - Skip Phase 7 when `SLACK_WEBHOOK_URL` is set (unless `SKIP_SLACK`)
 - Create per-CVE summary/tracking Tasks (`CVE-… (N issues, M repos)`)
 - Use curl REST for comments on vulnerability issues
-- Mark draft PRs ready for review or merge them
+- Create CVE fix PRs as drafts (always ready for review) — and never approve or
+  merge PRs (humans approve; Tide merges with `acknowledge-security-fixes-only`)
 - Close vulnerability issues unless: (a) **Not Applicable** with evidence (§6.2),
-  (b) linked fix PR is **MERGED** per `gh` (§6.5), or (c) toolchain verify with
-  `go version -m` ≥ `min_go` + Fix Version (§6.0 / `sfa-cve-toolchain-verify`)
+  (b) linked fix PR is **MERGED** per `gh` **and** Fix Version resolved from Konflux image
+  (§6.5), or (c) toolchain verify with `go version -m` ≥ `min_go` + Fix Version
+  (§6.0 / `sfa-cve-toolchain-verify`)
 - Open more than one PR per `(repo, branch, CVE)` per run
 - Hand-craft a Slack digest that omits clickable `https://github.com/.../pull/N` URLs
   (always use `generate_slack_payload.py` + `send_to_slack.sh` / MCP `send_payload`)
@@ -909,6 +968,6 @@ Report in session output:
 - Recommend bumping an indirect module (e.g. `golang.org/x/net`) when the advisory is
   dual-fixed via stdlib and the component does not import the vulnerable package path
 - Skip Phase 6 for a CVE because analysis was dedup'd — remediating open ❌ / ⚠️
-  issues (draft PRs) and closing ➖ / merged-PR issues is still required
-- Report “Draft PRs needed” for dependency bumps as the only outcome when §6.4 was
+  issues (fix PRs) and closing ➖ / merged-PR issues is still required
+- Report “Fix PRs needed” for dependency bumps as the only outcome when §6.4 was
   not attempted this run

@@ -72,7 +72,8 @@ long-form docs in `workflows/daily-bug-triage.md`.
 **CVE fix:** `fix-cve.md` groups ProsSec vulnerability issues by CVE,
 **classifies toolchain/stdlib vs module first**, runs deep branch impact analysis
 (module path), posts Jira comments on **Vulnerability** issues (does **not** create
-per-CVE summary Tasks), opens **draft PRs** for module CVEs or **Konflux rebuilds** for
+per-CVE summary Tasks), opens **ready-for-review PRs** (with automatic `/ok-to-test`)
+for module CVEs or **Konflux rebuilds** for
 toolchain CVEs, and **closes** vulnerability issues when Not Applicable / verified.
 Skills: `.claude/skills/sfa-cve-analysis/`, `sfa-cve-toolchain/`,
 `sfa-cve-toolchain-verify/`.
